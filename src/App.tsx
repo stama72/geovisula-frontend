@@ -1,6 +1,7 @@
 import { useRef, useEffect, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
-import 'mapbox-gl/dist/mapbox-gl.css'
+import 'mapbox-gl/dist/mapbox-gl.css';
+import './App.css'
 import { api } from './api'
 import LoginPage from './LoginPage'
 import DiplomaticEditor from './DiplomaticEditor'
@@ -8,8 +9,8 @@ import CountryManager from './CountryManager'
 import HistoryPage from './HistoryPage'
 
 type Country = { id: string; name_ja: string; lat: number; lng: number }
-type TradeLink = { from: string; to: string; value: number; category: string; year: number }
-type DiplomaticRelation = {
+//type TradeLink = { from: string; to: string; value: number; category: string; year: number }
+type RelationLinks = {
   id: number
   country_a: string
   country_b: string
@@ -50,33 +51,35 @@ function getCurvedPoints(
 
 export default function App() {
   const [countries, setCountries]   = useState<Country[]>([])
+//  const [tradeLinks, setTradeLinks] = useState<TradeLink[]>([])
   const [category, setCategory]     = useState('')
   const [year, setYear]             = useState(2023)
 
+  // 認証状態
   const [token, setToken]               = useState(localStorage.getItem('token') ?? '')
   const [displayName, setDisplayName]   = useState(localStorage.getItem('displayName') ?? '')
   const [role, setRole]                 = useState(localStorage.getItem('role') ?? '')
   const [showEditor, setShowEditor]     = useState(false)
   
-  const [diplomaticLinks, setDiplomaticLinks] = useState<DiplomaticRelation[]>([])
+  const [diplomaticLinks, setDiplomaticLinks] = useState<RelationLinks[]>([])
   const [showCountryManager, setShowCountryManager] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
 
   const mapRef = useRef<mapboxgl.Map | null>(null)
   const mapContainerRef = useRef<HTMLDivElement>(null)
 
-  const [lng, setLng] = useState(139.6917)
-  const [lat, setLat] = useState(35.6895)
-  const [zoom, setZoom] = useState(2)
+  const [lng, setLng] = useState(139.6917);
+  const [lat, setLat] = useState(35.6895);
+  const [zoom, setZoom] = useState(2);
 
   useEffect(() => {
     api.getCountries().then(setCountries)
   }, [])
 
-  useEffect(() => {
+/*  useEffect(() => {
     api.getTradeLinks(category || undefined, year).then(setTradeLinks)
   }, [category, year])
-
+*/
   useEffect(() => {
   if (!token) return
   api.getApprovedRelations().then(setDiplomaticLinks)
@@ -99,14 +102,37 @@ export default function App() {
     api.getCountries().then(setCountries)
   }
 
-  useEffect(() => {
-    // Load Mapbox token from environment variable
-    const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN
-    if (!mapboxToken) {
-      console.error('VITE_MAPBOX_TOKEN is not set in .env')
-      return
+  function createGeometry(doesCrossAntimeridian: boolean,lat1: number, lng1: number, lat2: number, lng2: number) {
+    const geometry = {
+      type: 'LineString' as const,
+      coordinates: [
+          [lng1, lat1],
+          [lng2, lat2]
+      ] as [number, number][]
+    } as const;
+
+    // To draw a line across the 180th meridian,
+    // if the longitude of the second point minus
+    // the longitude of original (or previous) point is >= 180,
+    // subtract 360 from the longitude of the second point.
+    // If it is less than 180, add 360 to the second point.
+    if (doesCrossAntimeridian) {
+      const startLng = geometry.coordinates[0][0];
+      const endLng = geometry.coordinates[1][0];
+
+      if (endLng - startLng >= 180) {
+        geometry.coordinates[1][0] -= 360;
+      } else if (endLng - startLng < 180) {
+        geometry.coordinates[1][0] += 360;
+      }
     }
-    mapboxgl.accessToken = mapboxToken
+    return geometry;
+  }
+
+  const countryMap = Object.fromEntries(countries.map(c => [c.id, c]))
+
+  useEffect(() => {
+    mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN ?? '';
 
     mapRef.current = new mapboxgl.Map({
       container: mapContainerRef.current as HTMLElement,
@@ -114,16 +140,80 @@ export default function App() {
       center: [lng, lat],
       zoom: zoom,
       antialias: true,
-    })
+    });
+
+    mapRef.current.on('load', () => {
+      if (!mapRef.current) return;
+      mapRef.current.addLayer({
+        id: 'route',
+        type: 'line',
+        source: {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: createGeometry(false, -16.59408, -72.42187, 35.67514, 140.27343)
+          }
+        },
+        layout: { 'line-cap': 'round' },
+        paint: {
+          'line-color': '#007296',
+          'line-width': 4
+        }
+      });
+
+      mapRef.current.addLayer({
+        id: 'route-label',
+        type: 'symbol',
+        source: 'route',
+        layout: {
+          'symbol-placement': 'line-center',
+          'text-field': 'Crosses the world'
+        }
+      });
+
+      mapRef.current.addLayer({
+        id: 'route-two',
+        type: 'line',
+        source: {
+          type: 'geojson',
+          data: {
+            type: 'Feature',
+            properties: {},
+            geometry: createGeometry(true, 35.67514, 140.27343, -16.59408, -72.42187)
+          }
+        },
+        layout: { 'line-cap': 'round' },
+        paint: {
+          'line-color': '#F06317',
+          'line-width': 4
+        }
+      });
+      //ラベル
+      mapRef.current.addLayer({
+        id: 'route-two-label',
+        type: 'symbol',
+        source: 'route-two',
+        layout: {
+          'symbol-placement': 'line-center',
+          'text-field': 'Crosses 180th meridian'
+        }
+      });
+    });
 
     return () => {
-      mapRef.current?.remove()
-    }
-  }, [])
+      mapRef.current?.remove();
+    };
+  }, []);
+
 
   // 未ログインはログイン画面を表示
   if (!token) return <LoginPage onLogin={handleLogin} />
 
+  // 地図選択画面
+
+
+  // 地図画面
   return (
     <div style={{ position: 'relative', height: '100vh' }}>
 
@@ -134,7 +224,7 @@ export default function App() {
         display: 'flex', alignItems: 'center', gap: 12,
         boxShadow: '0 1px 6px rgba(0,0,0,0.1)',
       }}>
-        <span style={{ fontWeight: 600, fontSize: 16, color: '#2c3e50' }}>Diplomap</span>
+        <span style={{ fontWeight: 600, fontSize: 16, color: '#2c3e50' }}>GeoVisula</span>
         <span style={{ flex: 1 }} />
         
         {/* 外交関係の凡例 */}
@@ -184,12 +274,12 @@ export default function App() {
         </button>
 
         {/*編集履歴 */}
-        <button onClick={() => setShowHistory(true)} style={{
+        {/*<button onClick={() => setShowHistory(true)} style={{
           padding: '4px 14px', borderRadius: 4, border: 'none',
           background: '#2c3e50', color: 'white', cursor: 'pointer', fontSize: 13,
         }}>
           編集履歴
-        </button>
+        </button>*/}
 
         {/* ユーザー情報 */}
         <span style={{ fontSize: 13, color: '#555' }}>{displayName}（{role}）</span>
@@ -201,21 +291,68 @@ export default function App() {
         </button>
       </div>
 
-      {/* 地図 */}
-      <div id="map-container" ref={mapContainerRef} style={{ height: '100%', width: '100%' }} />
-
-      {/* 外交データ編集パネル */}
-      {showEditor && (
-        <DiplomaticEditor role={role} onClose={() => setShowEditor(false)} countries={countries}  />
-      )}
-
-      {/* 国管理パネル */}
-      {showCountryManager && (
-        <CountryManager
-          role={role}
-          countries={countries}
-          onClose={() => setShowCountryManager(false)}
-          onUpdate={reloadCountries}
+      {/* 地図 Mapbox*/}      
+      <div id='map-container' ref={mapContainerRef}/>
+{/*        {diplomaticLinks.map((link) => {
+          const a = countryMap[link.country_a]
+          const b = countryMap[link.country_b]
+          if (!a || !b) return null
+          const color = RELATION_COLORS[link.relation_type] ?? '#95a5a6'
+          return (
+            <Polyline
+              key={`diplomatic-${link.id}`}
+              positions={[
+                [a.lat, a.lng],
+                [b.lat, b.lng],
+              ]}
+              color={color}
+              weight={3}
+              opacity={0.8}
+              dashArray="8 4"
+            >
+              <Tooltip>
+                <strong>{a.name_ja} ↔ {b.name_ja}</strong><br />
+                関係: {link.relation_type}<br />
+                {link.summary}<br />
+                <a href={link.source_url} target="_blank" rel="noreferrer"
+                  style={{ fontSize: 11, color: '#3498db' }}>
+                  出典を見る
+                </a>
+              </Tooltip>
+            </Polyline>
+          )
+        })}
+*/}      
+      {/* 地図 leaflet版*/}
+      {/*<MapContainer center={[20, 0]} zoom={2} style={{ height: '100%', width: '100%', paddingTop: 48 }}>
+        <TileLayer
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='© OpenStreetMap contributors'
+        />
+        {countries.map(c => (
+          <CircleMarker key={c.id} center={[c.lat, c.lng]}
+            radius={8} color="#e74c3c" fillColor="#e74c3c" fillOpacity={0.8}>
+            <Tooltip permanent>{c.name_ja}</Tooltip>
+          </CircleMarker>
+        ))}
+        {tradeLinks.map((link, i) => {
+          const from = countryMap[link.from], to = countryMap[link.to]
+          if (!from || !to) return null
+          const points = getCurvedPoints([from.lat, from.lng], [to.lat, to.lng], 1)
+          return (
+            <Polyline key={i} positions={points}
+              color="#3498db" weight={Math.log(link.value) / 2} opacity={0.7}>
+              <Tooltip>
+                {from.name_ja} → {to.name_ja}<br />
+                分野: {link.category}<br />
+                金額: {link.value}億円 / 年: {link.year}
+              </Tooltip>
+            </Polyline>
+          )
+        })}
+      </MapContainer>}      
+     
+onUpdate={reloadCountries}
         />
       )}
       {/* 編集履歴パネル */}
