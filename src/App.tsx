@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
-import { MapContainer, TileLayer, Polyline, CircleMarker, Tooltip } from 'react-leaflet'
-import 'leaflet/dist/leaflet.css'
+import { useRef, useEffect, useState } from 'react'
+import mapboxgl from 'mapbox-gl'
+import 'mapbox-gl/dist/mapbox-gl.css'
 import { api } from './api'
 import LoginPage from './LoginPage'
 import DiplomaticEditor from './DiplomaticEditor'
@@ -50,11 +50,9 @@ function getCurvedPoints(
 
 export default function App() {
   const [countries, setCountries]   = useState<Country[]>([])
-  const [tradeLinks, setTradeLinks] = useState<TradeLink[]>([])
   const [category, setCategory]     = useState('')
   const [year, setYear]             = useState(2023)
 
-  // 認証状態
   const [token, setToken]               = useState(localStorage.getItem('token') ?? '')
   const [displayName, setDisplayName]   = useState(localStorage.getItem('displayName') ?? '')
   const [role, setRole]                 = useState(localStorage.getItem('role') ?? '')
@@ -63,6 +61,13 @@ export default function App() {
   const [diplomaticLinks, setDiplomaticLinks] = useState<DiplomaticRelation[]>([])
   const [showCountryManager, setShowCountryManager] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
+
+  const mapRef = useRef<mapboxgl.Map | null>(null)
+  const mapContainerRef = useRef<HTMLDivElement>(null)
+
+  const [lng, setLng] = useState(139.6917)
+  const [lat, setLat] = useState(35.6895)
+  const [zoom, setZoom] = useState(2)
 
   useEffect(() => {
     api.getCountries().then(setCountries)
@@ -94,7 +99,27 @@ export default function App() {
     api.getCountries().then(setCountries)
   }
 
-  const countryMap = Object.fromEntries(countries.map(c => [c.id, c]))
+  useEffect(() => {
+    // Load Mapbox token from environment variable
+    const mapboxToken = import.meta.env.VITE_MAPBOX_TOKEN
+    if (!mapboxToken) {
+      console.error('VITE_MAPBOX_TOKEN is not set in .env')
+      return
+    }
+    mapboxgl.accessToken = mapboxToken
+
+    mapRef.current = new mapboxgl.Map({
+      container: mapContainerRef.current as HTMLElement,
+      style: 'mapbox://styles/mapbox/standard',
+      center: [lng, lat],
+      zoom: zoom,
+      antialias: true,
+    })
+
+    return () => {
+      mapRef.current?.remove()
+    }
+  }, [])
 
   // 未ログインはログイン画面を表示
   if (!token) return <LoginPage onLogin={handleLogin} />
@@ -177,63 +202,7 @@ export default function App() {
       </div>
 
       {/* 地図 */}
-      <MapContainer center={[20, 0]} zoom={2} style={{ height: '100%', width: '100%', paddingTop: 48 }}>
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='© OpenStreetMap contributors'
-        />
-        {countries.map(c => (
-          <CircleMarker key={c.id} center={[c.lat, c.lng]}
-            radius={8} color="#e74c3c" fillColor="#e74c3c" fillOpacity={0.8}>
-            <Tooltip permanent>{c.name_ja}</Tooltip>
-          </CircleMarker>
-        ))}
-        {tradeLinks.map((link, i) => {
-          const from = countryMap[link.from], to = countryMap[link.to]
-          if (!from || !to) return null
-          const points = getCurvedPoints([from.lat, from.lng], [to.lat, to.lng], 1)
-          return (
-            <Polyline key={i} positions={points}
-              color="#3498db" weight={Math.log(link.value) / 2} opacity={0.7}>
-              <Tooltip>
-                {from.name_ja} → {to.name_ja}<br />
-                分野: {link.category}<br />
-                金額: {link.value}億円 / 年: {link.year}
-              </Tooltip>
-            </Polyline>
-          )
-        })}
-        {/* 承認済み外交ライン */}
-        {diplomaticLinks.map((link) => {
-          const a = countryMap[link.country_a]
-          const b = countryMap[link.country_b]
-          if (!a || !b) return null
-          const color = RELATION_COLORS[link.relation_type] ?? '#95a5a6'
-          return (
-            <Polyline
-              key={`diplomatic-${link.id}`}
-              positions={[
-                [a.lat, a.lng],
-                [b.lat, b.lng],
-              ]}
-              color={color}
-              weight={3}
-              opacity={0.8}
-              dashArray="8 4"
-            >
-              <Tooltip>
-                <strong>{a.name_ja} ↔ {b.name_ja}</strong><br />
-                関係: {link.relation_type}<br />
-                {link.summary}<br />
-                <a href={link.source_url} target="_blank" rel="noreferrer"
-                  style={{ fontSize: 11, color: '#3498db' }}>
-                  出典を見る
-                </a>
-              </Tooltip>
-            </Polyline>
-          )
-        })}
-      </MapContainer>
+      <div id="map-container" ref={mapContainerRef} style={{ height: '100%', width: '100%' }} />
 
       {/* 外交データ編集パネル */}
       {showEditor && (
