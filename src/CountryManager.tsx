@@ -48,8 +48,8 @@ export default function CountryManager({ role, countries, onClose, onUpdate }: P
       setMessage(`${form.name_ja} を追加しました`)
       setForm({ id: '', name_ja: '', lat: '', lng: '' })
       onUpdate()
-    } catch (e: any) {
-      setMessage(`エラー: ${e.message}`)
+    } catch (error: unknown) {
+      setMessage(`エラー: ${error instanceof Error ? error.message : '不明なエラーです'}`)
     }
   }
 
@@ -60,8 +60,8 @@ export default function CountryManager({ role, countries, onClose, onUpdate }: P
       await api.deleteCountry(id)
       setMessage(`${name} を削除しました`)
       onUpdate()
-    } catch (e: any) {
-      setMessage(`エラー: ${e.message}`)
+    } catch (error: unknown) {
+      setMessage(`エラー: ${error instanceof Error ? error.message : '不明なエラーです'}`)
     }
   }
 

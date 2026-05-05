@@ -7,9 +7,9 @@ type Props = {
 
 export default function LoginPage({ onLogin }: Props) {
   const [mode, setMode]       = useState<'login' | 'register'>('login')
-  const [email, setEmail]     = useState('')
   const [password, setPass]   = useState('')
   const [name, setName]       = useState('')
+  const [displayName, setDisplayName] = useState('')
   const [error, setError]     = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -34,13 +34,13 @@ export default function LoginPage({ onLogin }: Props) {
     setLoading(true)
     try {
       if (mode === 'register') {
-        await api.register(email, password, name)
+        await api.register(name, password, displayName)
       }
-      const data = await api.login(email, password)
+      const data = await api.login(name, password)
       localStorage.setItem('token', data.access_token)
       onLogin(data.access_token, data.display_name, data.role)
-    } catch (e: any) {
-      setError(e.message)
+    } catch (error: unknown) {
+      setError(error instanceof Error ? error.message : '不明なエラーです')
     } finally {
       setLoading(false)
     }
@@ -74,16 +74,16 @@ export default function LoginPage({ onLogin }: Props) {
         {mode === 'register' && (
           <input
             style={inputStyle}
-            placeholder="表示名"
+            placeholder="ユーザーID (半角英数字)"
             value={name}
             onChange={e => setName(e.target.value)}
           />
         )}
         <input
           style={inputStyle}
-          placeholder="メールアドレス"
-          value={email}
-          onChange={e => setEmail(e.target.value)}
+          placeholder="ユーザー表示名"
+          value={displayName}
+          onChange={e => setDisplayName(e.target.value)}
         />
         <input
           style={inputStyle}
