@@ -4,34 +4,58 @@ import 'mapbox-gl/dist/mapbox-gl.css';
 import './App.css'
 import { api } from './api'
 import LoginPage from './LoginPage'
-import DiplomaticEditor from './DiplomaticEditor'
-import CountryManager from './CountryManager'
-import HistoryPage from './HistoryPage'
 
-type Country = { id: string; name_ja: string; lat: number; lng: number }
-//type TradeLink = { from: string; to: string; value: number; category: string; year: number }
-type RelationLinks = {
-  id: number
-  country_a: string
-  country_b: string
-  relation_type: string
+
+type Country = {
+  iso_id:   string
+  name:     string
+  name_ja:  string
+  lat:      number
+  lng:      number
+  exist_from : Date
+  exist_until : Date
   summary: string
+  summary_ja: string
+}
+
+type RelationLink = {
+  map_id: number
+  link_type: number
+  from_country: number
+  to_country: number
+  exist_from: Date
+  exist_until: Date
+}
+
+type LinkDetails = {
+  link_id: number
+  summary: string
+  summary_ja: string
   source_url: string
 }
-
-const CATEGORIES = [
-  { value: '',       label: 'すべて' },
-  { value: 'food',   label: '食料' },
-  { value: 'energy', label: 'エネルギー' },
-]
-
-const RELATION_COLORS: Record<string, string> = {
-  '同盟':   '#8f44ad',
-  '友好的': '#27ae60',
-  '中立':   '#95a5a6',
-  '緊張':   '#e67e22',
-  '対立':   '#e74c3c',
+type Map = {
+    id: number
+    name: string
+    name_ja: string
+    owner_id: number
+    read_permission: string
+    edit_permission: string
+    exist_from: Date
+    exist_until: Date
+    time_scale: string
+    summary: string
+    summary_jp: string
+    regulations: string
 }
+type LinkType = {
+    id: number
+    name: string
+    name_ja: string
+    map_id: number
+    color: string
+    animated: boolean
+}
+
 
 function getCurvedPoints(
   from: [number, number], to: [number, number],
@@ -51,9 +75,6 @@ function getCurvedPoints(
 
 export default function App() {
   const [countries, setCountries]   = useState<Country[]>([])
-//  const [tradeLinks, setTradeLinks] = useState<TradeLink[]>([])
-  const [category, setCategory]     = useState('')
-  const [year, setYear]             = useState(2023)
 
   // 認証状態
   const [token, setToken]               = useState(localStorage.getItem('token') ?? '')
@@ -61,10 +82,13 @@ export default function App() {
   const [role, setRole]                 = useState(localStorage.getItem('role') ?? '')
   const [showEditor, setShowEditor]     = useState(false)
   
-  const [diplomaticLinks, setDiplomaticLinks] = useState<RelationLinks[]>([])
   const [showCountryManager, setShowCountryManager] = useState(false)
-  const [showHistory, setShowHistory] = useState(false)
 
+  // Map data
+  const [map, setMap] = useState<Map | null>(null)
+  const [linkTypes, setLinkTypes] = useState<LinkType[]>([])
+
+  // Map Box
   const mapRef = useRef<mapboxgl.Map | null>(null)
   const mapContainerRef = useRef<HTMLDivElement>(null)
 
@@ -76,14 +100,27 @@ export default function App() {
     api.getCountries().then(setCountries)
   }, [])
 
-/*  useEffect(() => {
-    api.getTradeLinks(category || undefined, year).then(setTradeLinks)
-  }, [category, year])
-*/
-  useEffect(() => {
-  if (!token) return
-  api.getApprovedRelations().then(setDiplomaticLinks)
-  }, [token])
+  // 認証の有無で表示を切り替え
+  const accountActions = () => {
+    //if(token) {
+      return (
+        <button onClick={handleLogout} style={{
+          padding: '4px 12px', borderRadius: 4, border: '1px solid #ccc',
+          background: 'white', cursor: 'pointer', fontSize: 13,
+        }}>
+          ログアウト
+        </button>
+      );
+    /*} else {(
+        <button onClick={handleLoginClick} style={{
+          padding: '4px 12px', borderRadius: 4, border: '1px solid #ccc',
+          background: 'white', cursor: 'pointer', fontSize: 13,
+        }}>
+          ログイン/登録
+        </button>)
+    };*/
+  };
+
 
   function handleLogin(newToken: string, name: string, userRole: string) {
     setToken(newToken)
@@ -91,6 +128,15 @@ export default function App() {
     setRole(userRole)
     localStorage.setItem('displayName', name)
     localStorage.setItem('role', userRole)
+  }
+  /*
+  function handleLoginClick() {
+    return (<LoginPage onLogin={handleLogin} />)
+  }
+  */
+
+  if (!token) {
+    return (<LoginPage onLogin={handleLogin} />)
   }
 
   function handleLogout() {
@@ -129,7 +175,6 @@ export default function App() {
     return geometry;
   }
 
-  const countryMap = Object.fromEntries(countries.map(c => [c.id, c]))
 
   useEffect(() => {
     mapboxgl.accessToken = import.meta.env.VITE_MAPBOX_TOKEN ?? '';
@@ -206,13 +251,6 @@ export default function App() {
     };
   }, []);
 
-
-  // 未ログインはログイン画面を表示
-  if (!token) return <LoginPage onLogin={handleLogin} />
-
-  // 地図選択画面
-
-
   // 地図画面
   return (
     <div style={{ position: 'relative', height: '100vh' }}>
@@ -227,42 +265,25 @@ export default function App() {
         <span style={{ fontWeight: 600, fontSize: 16, color: '#2c3e50' }}>GeoVisula</span>
         <span style={{ flex: 1 }} />
         
-        {/* 外交関係の凡例 */}
+        {/* 関係性の凡例 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginRight: 8 }}>
-          {Object.entries(RELATION_COLORS).map(([label, color]) => (
+          {Object.entries(linkTypes).map(([label, color]) => (
             <span key={label} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12 }}>
               <span style={{
                 display: 'inline-block', width: 24, height: 3,
-                background: color, borderRadius: 2,
+                background: `rgba(${color}, 0.8)`, borderRadius: 2,
               }} />
               {label}
             </span>
           ))}
         </div>
 
-        {/* カテゴリーフィルター */}
-        {CATEGORIES.map(c => (
-          <button key={c.value} onClick={() => setCategory(c.value)} style={{
-            padding: '4px 12px', borderRadius: 4, border: '1px solid #ccc',
-            cursor: 'pointer', fontSize: 13,
-            background: category === c.value ? '#3498db' : 'white',
-            color:      category === c.value ? 'white'   : '#333',
-          }}>
-            {c.label}
-          </button>
-        ))}
-
-        {/* シークバー */}
-        <span style={{ fontSize: 13, color: '#555' }}>年: {year}</span>
-        <input type="range" min={2021} max={2023} value={year}
-          onChange={e => setYear(Number(e.target.value))} style={{ width: 100 }} />
-
         {/* 編集ボタン */}
         <button onClick={() => setShowEditor(true)} style={{
           padding: '4px 14px', borderRadius: 4, border: 'none',
           background: '#2ecc71', color: 'white', cursor: 'pointer', fontSize: 13,
         }}>
-          外交データ編集
+          マップ編集
         </button>
         
         {/* 国管理ボタン（adminのみ） */}
@@ -270,95 +291,24 @@ export default function App() {
           padding: '4px 14px', borderRadius: 4, border: 'none',
           background: '#e67e22', color: 'white', cursor: 'pointer', fontSize: 13,
         }}>
-          国の管理
+          国データ管理
         </button>
-
-        {/*編集履歴 */}
-        {/*<button onClick={() => setShowHistory(true)} style={{
-          padding: '4px 14px', borderRadius: 4, border: 'none',
-          background: '#2c3e50', color: 'white', cursor: 'pointer', fontSize: 13,
-        }}>
-          編集履歴
-        </button>*/}
 
         {/* ユーザー情報 */}
         <span style={{ fontSize: 13, color: '#555' }}>{displayName}（{role}）</span>
-        <button onClick={handleLogout} style={{
-          padding: '4px 12px', borderRadius: 4, border: '1px solid #ccc',
-          background: 'white', cursor: 'pointer', fontSize: 13,
-        }}>
-          ログアウト
-        </button>
+        {accountActions()}
       </div>
 
       {/* 地図 Mapbox*/}      
       <div id='map-container' ref={mapContainerRef}/>
-{/*        {diplomaticLinks.map((link) => {
-          const a = countryMap[link.country_a]
-          const b = countryMap[link.country_b]
-          if (!a || !b) return null
-          const color = RELATION_COLORS[link.relation_type] ?? '#95a5a6'
-          return (
-            <Polyline
-              key={`diplomatic-${link.id}`}
-              positions={[
-                [a.lat, a.lng],
-                [b.lat, b.lng],
-              ]}
-              color={color}
-              weight={3}
-              opacity={0.8}
-              dashArray="8 4"
-            >
-              <Tooltip>
-                <strong>{a.name_ja} ↔ {b.name_ja}</strong><br />
-                関係: {link.relation_type}<br />
-                {link.summary}<br />
-                <a href={link.source_url} target="_blank" rel="noreferrer"
-                  style={{ fontSize: 11, color: '#3498db' }}>
-                  出典を見る
-                </a>
-              </Tooltip>
-            </Polyline>
-          )
-        })}
-*/}      
-      {/* 地図 leaflet版*/}
-      {/*<MapContainer center={[20, 0]} zoom={2} style={{ height: '100%', width: '100%', paddingTop: 48 }}>
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='© OpenStreetMap contributors'
-        />
-        {countries.map(c => (
-          <CircleMarker key={c.id} center={[c.lat, c.lng]}
-            radius={8} color="#e74c3c" fillColor="#e74c3c" fillOpacity={0.8}>
-            <Tooltip permanent>{c.name_ja}</Tooltip>
-          </CircleMarker>
-        ))}
-        {tradeLinks.map((link, i) => {
-          const from = countryMap[link.from], to = countryMap[link.to]
-          if (!from || !to) return null
-          const points = getCurvedPoints([from.lat, from.lng], [to.lat, to.lng], 1)
-          return (
-            <Polyline key={i} positions={points}
-              color="#3498db" weight={Math.log(link.value) / 2} opacity={0.7}>
-              <Tooltip>
-                {from.name_ja} → {to.name_ja}<br />
-                分野: {link.category}<br />
-                金額: {link.value}億円 / 年: {link.year}
-              </Tooltip>
-            </Polyline>
-          )
-        })}
-      </MapContainer>}      
-     
-onUpdate={reloadCountries}
-        />
-      )}
-      {/* 編集履歴パネル */}
-      {showHistory && (
-        <HistoryPage onClose={() => setShowHistory(false)} />
-      )}
+      {/* フッター */}
+      <div style={{
+        position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 1000,
+        background: 'rgba(255,255,255,0)', padding: '8px 16px',
+        display: 'flex', alignItems: 'center', gap: 12,
+        boxShadow: '0 -1px 6px rgba(0,0,0,0.1)',
+      }}>
+      </div>
     </div>
   )
 }
