@@ -32,18 +32,48 @@ export default function LoginPage({ onLogin }: Props) {
   async function handleSubmit() {
     setError('')
     setLoading(true)
-    for (const inst of [name, displayName, password]) {
-      if (!inst) {
-        setError('全ての項目を入力してください')
+    
+    //項目の入力チェック
+    if (mode === 'register') {
+      for (const inst of [name, password, displayName]) {
+        if (!inst) {
+          setError('全ての項目を入力してください')
+          setLoading(false)
+          return
+        }
+      }
+      if (displayName.length > 30) {
+        setError('ユーザー表示名は30文字以下である必要があります')
         setLoading(false)
         return
       }
     }
+    for (const inst of [name, password]) {
+      if (!inst) {
+        setError('ユーザーIDとパスワードを入力してください')
+        setLoading(false)
+        return
+      }
+    }
+        
     if (!/^[a-zA-Z0-9_]+$/.test(name)) {
       setError('ユーザーIDは半角英数字とアンダースコアのみ使用できます')
       setLoading(false)
       return
     }
+    if (!/^[a-zA-Z0-9]+$/.test(password)) {
+      setError('パスワードは半角英数字のみ使用できます')
+      setLoading(false)
+      return
+    }
+    if (password.length < 8) {
+      setError('パスワードは8文字以上である必要があります')
+      setLoading(false)
+      return
+    }
+    password.length > 72 && setError('パスワードは72文字以下である必要があります')
+    password.trim() !== password && setError('パスワードの前後にスペースは使用できません')
+    
     try {
       if (mode === 'register') {
         await api.register(name, password, displayName)

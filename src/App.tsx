@@ -11,7 +11,7 @@ export default function App() {
   const [displayName, setDisplayName] = useState(localStorage.getItem('displayName') ?? '')
   const [role, setRole] = useState(localStorage.getItem('role') ?? '')
   const [maps, setMaps] = useState<MapRecord[]>([])
-  const [selectedMapId, setSelectedMapId] = useState<number | null>(Number(localStorage.getItem('selectedMapId') ?? '') || null)
+  const [selectedMapId, setSelectedMapId] = useState<number | null>(Number(localStorage.getItem('selectedMapId') ?? '1') || null)
   const [countries, setCountries] = useState<CountryEditorEntry[]>([])
   const [showCountryManager, setShowCountryManager] = useState(false)
   const [loadingError, setLoadingError] = useState('')

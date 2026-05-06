@@ -76,7 +76,7 @@ export const api = {
 
   async addCountry(data: {
     id: string
-    name?: string
+    name: string
     name_ja: string
     lat: number
     lng: number
@@ -88,7 +88,7 @@ export const api = {
       headers: buildHeaders(true),
       body: JSON.stringify({
         iso_id: data.id,
-        name: data.name ?? data.name_ja,
+        name: data.name,
         name_ja: data.name_ja,
         lat: data.lat,
         lng: data.lng,

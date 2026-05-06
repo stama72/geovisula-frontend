@@ -27,26 +27,27 @@ const btnStyle = (color: string): React.CSSProperties => ({
 })
 
 export default function CountryManager({ role, countries, onClose, onUpdate }: Props) {
-  const [form, setForm] = useState({ id: '', name_ja: '', lat: '', lng: '' })
+  const [form, setForm] = useState({ id: '', name: '', name_ja: '', lat: '', lng: '' })
   const [message, setMessage] = useState('')
 
   const isAdmin = role === 'admin'
 
   async function handleAdd() {
     setMessage('')
-    if (!form.id || !form.name_ja || !form.lat || !form.lng) {
+    if (!form.id || !form.name || !form.name_ja || !form.lat || !form.lng) {
       setMessage('エラー: すべての項目を入力してください')
       return
     }
     try {
       await api.addCountry({
-        id:      form.id.toLowerCase().trim(),
+        id:    form.id.toLowerCase().trim(),
+        name:  form.name.trim(),
         name_ja: form.name_ja.trim(),
         lat:     parseFloat(form.lat),
         lng:     parseFloat(form.lng),
       })
       setMessage(`${form.name_ja} を追加しました`)
-      setForm({ id: '', name_ja: '', lat: '', lng: '' })
+      setForm({ id: '', name: '', name_ja: '', lat: '', lng: '' })
       onUpdate()
     } catch (error: unknown) {
       setMessage(`エラー: ${error instanceof Error ? error.message : '不明なエラーです'}`)
@@ -92,9 +93,12 @@ export default function CountryManager({ role, countries, onClose, onUpdate }: P
       {isAdmin && (
         <div style={{ marginBottom: 24, padding: 16, background: '#f8f9fa', borderRadius: 8 }}>
           <div style={{ fontWeight: 500, marginBottom: 12, fontSize: 14 }}>新しい国を追加</div>
-          <label style={{ fontSize: 12, color: '#666' }}>国ID（英小文字、例: france）</label>
-          <input style={inputStyle} placeholder="france"
+          <label style={{ fontSize: 12, color: '#666' }}>国ID（ISOコード2文字）</label>
+          <input style={inputStyle} placeholder="FR" maxLength={2}
             value={form.id} onChange={e => setForm({ ...form, id: e.target.value })} />
+          <label style={{ fontSize: 12, color: '#666' }}>国名（英語）</label>
+          <input style={inputStyle} placeholder="France"
+            value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
           <label style={{ fontSize: 12, color: '#666' }}>国名（日本語）</label>
           <input style={inputStyle} placeholder="フランス"
             value={form.name_ja} onChange={e => setForm({ ...form, name_ja: e.target.value })} />
@@ -106,6 +110,11 @@ export default function CountryManager({ role, countries, onClose, onUpdate }: P
             value={form.lng} onChange={e => setForm({ ...form, lng: e.target.value })} />
           <button style={btnStyle('#3498db')} onClick={handleAdd}>追加する</button>
           <div style={{ marginTop: 8, fontSize: 11, color: '#999' }}>
+            ISOコードは以下のwikipediaで調べられます。
+            <a href="https://ja.wikipedia.org/wiki/ISO_3166-1" target="_blank" rel="noopener noreferrer" style={{ color: '#3498db', textDecoration: 'underline' }}>
+              https://ja.wikipedia.org/wiki/ISO_3166-1
+            </a>
+            <br></br>
             緯度経度はGoogle マップで調べられます（地図上で右クリック→座標をコピー）
           </div>
         </div>
