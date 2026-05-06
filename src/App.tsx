@@ -11,7 +11,7 @@ export default function App() {
   const [displayName, setDisplayName] = useState(localStorage.getItem('displayName') ?? '')
   const [role, setRole] = useState(localStorage.getItem('role') ?? '')
   const [maps, setMaps] = useState<MapRecord[]>([])
-  const [selectedMapId, setSelectedMapId] = useState<number | null>(null)
+  const [selectedMapId, setSelectedMapId] = useState<number | null>(Number(localStorage.getItem('selectedMapId') ?? '') || null)
   const [countries, setCountries] = useState<CountryEditorEntry[]>([])
   const [showCountryManager, setShowCountryManager] = useState(false)
   const [loadingError, setLoadingError] = useState('')
@@ -129,7 +129,7 @@ export default function App() {
           boxShadow: '0 1px 0 rgba(255,255,255,0.08)',
         }}
       >
-        <span style={{ fontWeight: 700, fontSize: 16 }}>Diplomap</span>
+        <span style={{ fontWeight: 700, fontSize: 16 }}>Geovisula</span>
 
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#dbe4f0' }}>
           マップ

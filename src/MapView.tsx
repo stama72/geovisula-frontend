@@ -101,25 +101,25 @@ export default function MapView({ mapId }: Props) {
     window.addEventListener('resize', resize)
 
     map.on('load', () => {
-      if (!map.getSource('diplomap-links')) {
-        map.addSource('diplomap-links', {
+      if (!map.getSource('geovisula-links')) {
+        map.addSource('geovisula-links', {
           type: 'geojson',
           data: buildFeatureCollection<LinkFeatureProperties>([]),
         })
       }
 
-      if (!map.getSource('diplomap-countries')) {
-        map.addSource('diplomap-countries', {
+      if (!map.getSource('geovisula-countries')) {
+        map.addSource('geovisula-countries', {
           type: 'geojson',
           data: buildFeatureCollection<CountryFeatureProperties>([]),
         })
       }
 
-      if (!map.getLayer('diplomap-links-line')) {
+      if (!map.getLayer('geovisula-links-line')) {
         map.addLayer({
-          id: 'diplomap-links-line',
+          id: 'geovisula-links-line',
           type: 'line',
-          source: 'diplomap-links',
+          source: 'geovisula-links',
           layout: {
             'line-cap': 'round',
             'line-join': 'round',
@@ -132,11 +132,11 @@ export default function MapView({ mapId }: Props) {
         })
       }
 
-      if (!map.getLayer('diplomap-countries-circle')) {
+      if (!map.getLayer('geovisula-countries-circle')) {
         map.addLayer({
-          id: 'diplomap-countries-circle',
+          id: 'geovisula-countries-circle',
           type: 'circle',
-          source: 'diplomap-countries',
+          source: 'geovisula-countries',
           paint: {
             'circle-radius': 4.5,
             'circle-color': ['coalesce', ['get', 'color'], '#0f766e'],
@@ -146,11 +146,11 @@ export default function MapView({ mapId }: Props) {
         })
       }
 
-      if (!map.getLayer('diplomap-countries-label')) {
+      if (!map.getLayer('geovisula-countries-label')) {
         map.addLayer({
-          id: 'diplomap-countries-label',
+          id: 'geovisula-countries-label',
           type: 'symbol',
-          source: 'diplomap-countries',
+          source: 'geovisula-countries',
           layout: {
             'text-field': ['get', 'countryNameJa'],
             'text-size': 12,
@@ -165,7 +165,7 @@ export default function MapView({ mapId }: Props) {
         })
       }
 
-      map.on('click', 'diplomap-links-line', (event) => {
+      map.on('click', 'geovisula-links-line', (event) => {
         const feature = event.features?.[0]
         if (!feature) {
           return
@@ -183,7 +183,7 @@ export default function MapView({ mapId }: Props) {
           .addTo(map)
       })
 
-      map.on('click', 'diplomap-countries-circle', (event) => {
+      map.on('click', 'geovisula-countries-circle', (event) => {
         const feature = event.features?.[0]
         if (!feature) {
           return
@@ -199,16 +199,16 @@ export default function MapView({ mapId }: Props) {
           .addTo(map)
       })
 
-      map.on('mouseenter', 'diplomap-links-line', () => {
+      map.on('mouseenter', 'geovisula-links-line', () => {
         map.getCanvas().style.cursor = 'pointer'
       })
-      map.on('mouseleave', 'diplomap-links-line', () => {
+      map.on('mouseleave', 'geovisula-links-line', () => {
         map.getCanvas().style.cursor = ''
       })
-      map.on('mouseenter', 'diplomap-countries-circle', () => {
+      map.on('mouseenter', 'geovisula-countries-circle', () => {
         map.getCanvas().style.cursor = 'pointer'
       })
-      map.on('mouseleave', 'diplomap-countries-circle', () => {
+      map.on('mouseleave', 'geovisula-countries-circle', () => {
         map.getCanvas().style.cursor = ''
       })
     })
@@ -317,8 +317,8 @@ export default function MapView({ mapId }: Props) {
         })
 
         const mapInstance = mapRef.current
-        const linksSource = mapInstance.getSource('diplomap-links') as mapboxgl.GeoJSONSource | undefined
-        const countriesSource = mapInstance.getSource('diplomap-countries') as mapboxgl.GeoJSONSource | undefined
+        const linksSource = mapInstance.getSource('geovisula-links') as mapboxgl.GeoJSONSource | undefined
+        const countriesSource = mapInstance.getSource('geovisula-countries') as mapboxgl.GeoJSONSource | undefined
         linksSource?.setData(buildFeatureCollection(lineFeatures))
         countriesSource?.setData(buildFeatureCollection(countryFeatures))
 

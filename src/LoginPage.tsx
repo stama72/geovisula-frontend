@@ -32,6 +32,18 @@ export default function LoginPage({ onLogin }: Props) {
   async function handleSubmit() {
     setError('')
     setLoading(true)
+    for (const inst of [name, displayName, password]) {
+      if (!inst) {
+        setError('全ての項目を入力してください')
+        setLoading(false)
+        return
+      }
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(name)) {
+      setError('ユーザーIDは半角英数字とアンダースコアのみ使用できます')
+      setLoading(false)
+      return
+    }
     try {
       if (mode === 'register') {
         await api.register(name, password, displayName)
@@ -50,7 +62,7 @@ export default function LoginPage({ onLogin }: Props) {
     <div style={{ background: '#f0f2f5', minHeight: '100vh' }}>
       <div style={cardStyle}>
         <h2 style={{ textAlign: 'center', marginBottom: 24, color: '#333' }}>
-          Diplomap
+          GeoVisula
         </h2>
 
         {/* ログイン / 登録 切り替え */}
@@ -70,21 +82,21 @@ export default function LoginPage({ onLogin }: Props) {
             </button>
           ))}
         </div>
-
+        
+        <input
+          style={inputStyle}
+          placeholder="ユーザーID (半角英数字)"
+          value={name}
+          onChange={e => setName(e.target.value)}
+        />
         {mode === 'register' && (
           <input
             style={inputStyle}
-            placeholder="ユーザーID (半角英数字)"
-            value={name}
-            onChange={e => setName(e.target.value)}
+            placeholder="ユーザー表示名"
+            value={displayName}
+            onChange={e => setDisplayName(e.target.value)}
           />
         )}
-        <input
-          style={inputStyle}
-          placeholder="ユーザー表示名"
-          value={displayName}
-          onChange={e => setDisplayName(e.target.value)}
-        />
         <input
           style={inputStyle}
           type="password"
