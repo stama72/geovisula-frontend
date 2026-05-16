@@ -65,6 +65,7 @@ export type MapPoint = {
 export type CountryEditorEntry = {
   id: string
   name_ja: string
+  capital_point_id?: number | null
   lat: number
   lng: number
 }

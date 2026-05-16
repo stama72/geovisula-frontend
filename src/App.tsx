@@ -2,9 +2,12 @@ import { useEffect, useState } from 'react'
 import './App.css'
 import { api } from './api'
 import CountryManager from './CountryManager'
+import EditMapPanel from './EditMapPanel'
+import LinkTypesPanel from './LinkTypesPanel'
 import LoginPage from './LoginPage'
 import MapView from './MapView'
-import type { Country, CountryCoordinates, CountryEditorEntry, MapRecord } from './types'
+import LinkEditorPanel from './LinkEditorPanel'
+import type { Country, CountryCoordinates, CountryEditorEntry, LinkType, MapRecord } from './types'
 
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem('token') ?? '')
@@ -13,8 +16,21 @@ export default function App() {
   const [maps, setMaps] = useState<MapRecord[]>([])
   const [selectedMapId, setSelectedMapId] = useState<number | null>(Number(localStorage.getItem('selectedMapId') ?? '1') || null)
   const [countries, setCountries] = useState<CountryEditorEntry[]>([])
+  const [linkTypes, setLinkTypes] = useState<LinkType[]>([])
   const [showCountryManager, setShowCountryManager] = useState(false)
+  const [showMapEditor, setShowMapEditor] = useState(false)
+  const [showLinkTypeEditor, setShowLinkTypeEditor] = useState(false)
   const [loadingError, setLoadingError] = useState('')
+  const [mapEditable, setMapEditable] = useState(false)
+  const [editMode, setEditMode] = useState(false)
+  const [linkDraft, setLinkDraft] = useState<{
+    fromCountryId: string
+    toCountryId: string
+    fromCoords: [number, number]
+    toCoords: [number, number]
+  } | null>(null)
+
+  const selectedMap = maps.find((map) => map.id === selectedMapId) ?? null
 
   useEffect(() => {
     if (!token) {
@@ -32,6 +48,7 @@ export default function App() {
             return {
               id: country.iso_id,
               name_ja: country.name_ja,
+              capital_point_id: country.capital_point_id,
               lat: coordinates.lat,
               lng: coordinates.lng,
             }
@@ -66,6 +83,67 @@ export default function App() {
     }
   }, [token])
 
+  useEffect(() => {
+    if (!token || !selectedMapId) {
+      setMapEditable(false)
+      setEditMode(false)
+      return
+    }
+
+    let cancelled = false
+    const mapId = selectedMapId
+
+    async function loadEditableState() {
+      try {
+        const { editable } = await api.isMapEditable(mapId)
+        if (!cancelled) {
+          setMapEditable(editable)
+          setEditMode(editable)
+        }
+      } catch {
+        if (!cancelled) {
+          setMapEditable(false)
+          setEditMode(false)
+        }
+      }
+    }
+
+    void loadEditableState()
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedMapId, token])
+
+  useEffect(() => {
+    if (!selectedMapId) {
+      setLinkTypes([])
+      return
+    }
+
+    let cancelled = false
+    const mapId = selectedMapId
+
+    async function loadLinkTypes() {
+      try {
+        const rows = await api.getLinkTypes(mapId)
+        if (!cancelled) {
+          setLinkTypes(rows)
+        }
+      } catch {
+        if (!cancelled) {
+          setLinkTypes([])
+        }
+      }
+    }
+
+    void loadLinkTypes()
+
+    return () => {
+      cancelled = true
+    }
+  }, [selectedMapId])
+
   function handleLogin(newToken: string, name: string, userRole: string) {
     setToken(newToken)
     setDisplayName(name)
@@ -73,6 +151,35 @@ export default function App() {
     localStorage.setItem('token', newToken)
     localStorage.setItem('displayName', name)
     localStorage.setItem('role', userRole)
+  }
+
+  async function handleLinkCreate(payload: { fromCountryId: string; toCountryId: string; fromCoords: [number, number]; toCoords: [number, number] }) {
+    setLinkDraft(payload)
+  }
+
+  async function handleLinkSave(form: { linkTypeId: number; existFrom: string; existUntil: string }) {
+    if (!selectedMapId || !linkDraft) {
+      return
+    }
+
+    const countryRows = await api.getCountries()
+    const fromCountry = countryRows.find((country) => country.iso_id === linkDraft.fromCountryId)
+    const toCountry = countryRows.find((country) => country.iso_id === linkDraft.toCountryId)
+
+    if (!fromCountry?.capital_point_id || !toCountry?.capital_point_id) {
+      throw new Error('国の首都座標が見つかりません')
+    }
+
+    await api.createLink({
+      map_id: selectedMapId,
+      link_type: form.linkTypeId,
+      from_country: fromCountry.capital_point_id,
+      to_country: toCountry.capital_point_id,
+      exist_from: form.existFrom,
+      exist_until: form.existUntil,
+    })
+
+    setLinkDraft(null)
   }
 
   function handleLogout() {
@@ -84,6 +191,8 @@ export default function App() {
     setCountries([])
     setSelectedMapId(null)
     setShowCountryManager(false)
+    setShowMapEditor(false)
+    setShowLinkTypeEditor(false)
     setLoadingError('')
   }
 
@@ -95,6 +204,7 @@ export default function App() {
         return {
           id: country.iso_id,
           name_ja: country.name_ja,
+          capital_point_id: country.capital_point_id,
           lat: coordinates.lat,
           lng: coordinates.lng,
         }
@@ -107,8 +217,6 @@ export default function App() {
   if (!token) {
     return <LoginPage onLogin={handleLogin} />
   }
-
-  const selectedMap = maps.find((map) => map.id === selectedMapId) ?? null
 
   return (
     <div style={{ position: 'relative', height: '100vh', overflow: 'hidden', background: '#08111f' }}>
@@ -148,7 +256,7 @@ export default function App() {
             {maps.length === 0 && <option value="">読み込み中...</option>}
             {maps.map((map) => (
               <option key={map.id} value={map.id}>
-                {map.name_ja} / {map.name}
+                {map.name_ja}
               </option>
             ))}
           </select>
@@ -163,6 +271,58 @@ export default function App() {
         <span style={{ flex: 1 }} />
 
         {loadingError && <span style={{ fontSize: 12, color: '#fda4af' }}>{loadingError}</span>}
+
+        {mapEditable && (
+          <>
+            <button
+              onClick={() => setShowMapEditor(true)}
+              style={{
+                padding: '7px 12px',
+                borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.18)',
+                background: 'rgba(15, 23, 42, 0.95)',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: 13,
+              }}
+            >
+              マップ編集
+            </button>
+
+            <button
+              onClick={() => setShowLinkTypeEditor(true)}
+              style={{
+                padding: '7px 12px',
+                borderRadius: 8,
+                border: '1px solid rgba(255,255,255,0.18)',
+                background: 'rgba(15, 23, 42, 0.95)',
+                color: 'white',
+                cursor: 'pointer',
+                fontSize: 13,
+              }}
+            >
+              リンクタイプ
+            </button>
+          </>
+        )}
+        
+        {mapEditable && (
+          <button
+            onClick={() => setEditMode(!editMode)}
+            style={{
+              padding: '7px 12px',
+              borderRadius: 8,
+              border: '1px solid rgba(255,255,255,0.18)',
+              background: editMode ? 'rgba(34, 197, 94, 0.12)' : 'rgba(15, 23, 42, 0.95)',
+              color: editMode ? '#86efac' : 'white',
+              cursor: 'pointer',
+              fontSize: 13,
+              fontWeight: editMode ? 700 : 400,
+            }}
+          >
+            {editMode ? '編集中' : '編集'}
+          </button>
+        )}
 
         <button
           onClick={() => setShowCountryManager(true)}
@@ -199,7 +359,38 @@ export default function App() {
         </button>
       </div>
 
-      <MapView mapId={selectedMapId} />
+      <MapView mapId={selectedMapId} editMode={editMode} onLinkCreate={handleLinkCreate} />
+
+      {linkDraft && selectedMap && (
+        <LinkEditorPanel
+          draft={linkDraft}
+          linkTypes={linkTypes}
+          onClose={() => setLinkDraft(null)}
+          onSave={handleLinkSave}
+        />
+      )}
+
+      {showMapEditor && selectedMap && (
+        <EditMapPanel
+          map={selectedMap}
+          onClose={() => setShowMapEditor(false)}
+          onSaved={(updatedMap) => {
+            setMaps((currentMaps) => currentMaps.map((map) => (map.id === updatedMap.id ? updatedMap : map)))
+            setShowMapEditor(false)
+          }}
+        />
+      )}
+
+      {showLinkTypeEditor && selectedMap && (
+        <LinkTypesPanel
+          mapId={selectedMap.id}
+          linkTypes={linkTypes}
+          onClose={() => setShowLinkTypeEditor(false)}
+          onRefresh={async () => {
+            setLinkTypes(await api.getLinkTypes(selectedMap.id))
+          }}
+        />
+      )}
 
       {showCountryManager && (
         <CountryManager

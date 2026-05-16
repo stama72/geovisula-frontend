@@ -11,6 +11,10 @@ type EnrichedCountry = Country & {
 
 type Props = {
   mapId: number | null
+  // When true, enable interactive link creation (click country A -> move -> click country B)
+  editMode?: boolean
+  // Called when a new link draft is completed (fromCountryId, toCountryId, coords)
+  onLinkCreate?: (payload: { fromCountryId: string; toCountryId: string; fromCoords: [number, number]; toCoords: [number, number] }) => void
 }
 
 type LinkFeatureProperties = {
@@ -71,7 +75,7 @@ function formatDateLabel(value: string | null) {
   return value.slice(0, 10)
 }
 
-export default function MapView({ mapId }: Props) {
+export default function MapView({ mapId, editMode = false, onLinkCreate }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<mapboxgl.Map | null>(null)
   const [mapInfo, setMapInfo] = useState<MapRecord | null>(null)
@@ -79,6 +83,14 @@ export default function MapView({ mapId }: Props) {
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
   const mapboxToken = useMemo(() => import.meta.env.VITE_MAPBOX_TOKEN as string | undefined, [])
+  const editModeRef = useRef<boolean>(editMode)
+  // mutable draft state used by map event handlers to avoid re-renders
+  const draftRef = useRef<{ fromCountryId?: string; fromCoords?: [number, number]; toCoords?: [number, number] }>({})
+
+  useEffect(() => {
+    // keep ref in sync so map event handlers use latest editMode
+    editModeRef.current = editMode
+  }, [editMode])
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current || !mapboxToken) {
@@ -165,6 +177,32 @@ export default function MapView({ mapId }: Props) {
         })
       }
 
+      // source/layer for temporary link draft while creating a new link
+      if (!map.getSource('geovisula-link-draft')) {
+        map.addSource('geovisula-link-draft', {
+          type: 'geojson',
+          data: buildFeatureCollection<LinkFeatureProperties>([]),
+        })
+      }
+
+      if (!map.getLayer('geovisula-link-draft-line')) {
+        map.addLayer({
+          id: 'geovisula-link-draft-line',
+          type: 'line',
+          source: 'geovisula-link-draft',
+          layout: {
+            'line-cap': 'round',
+            'line-join': 'round',
+          },
+          paint: {
+            'line-color': '#111827',
+            'line-width': 3,
+            'line-opacity': 0.9,
+            'line-dasharray': [2, 2],
+          },
+        })
+      }
+
       map.on('click', 'geovisula-links-line', (event) => {
         const feature = event.features?.[0]
         if (!feature) {
@@ -190,6 +228,50 @@ export default function MapView({ mapId }: Props) {
         }
 
         const properties = feature.properties as unknown as CountryFeatureProperties
+
+        // If edit mode is enabled, use clicks to start/complete draft links.
+        if (editModeRef.current) {
+          const countryId = properties.countryId
+          const geom = feature.geometry as GeoJSON.Point
+          const coords = geom.coordinates as [number, number]
+
+          if (!draftRef.current.fromCountryId) {
+            // start draft
+            draftRef.current = { fromCountryId: countryId, fromCoords: coords }
+            const src = map.getSource('geovisula-link-draft') as mapboxgl.GeoJSONSource | undefined
+            src?.setData(buildFeatureCollection([{
+              type: 'Feature',
+              geometry: { type: 'LineString', coordinates: buildArcCoordinates(coords, coords, 8) },
+              properties: {} as any,
+            }]))
+            return
+          }
+
+          // completing draft: ignore click on same country
+          if (draftRef.current.fromCountryId && draftRef.current.fromCountryId !== countryId) {
+            const fromCountryId = draftRef.current.fromCountryId
+            const fromCoords = draftRef.current.fromCoords as [number, number]
+            const toCountryId = countryId
+            const toCoords = coords
+
+            // notify parent to open editor / create draft
+            onLinkCreate?.({ fromCountryId, toCountryId, fromCoords, toCoords })
+
+            // clear draft visualization
+            const src = map.getSource('geovisula-link-draft') as mapboxgl.GeoJSONSource | undefined
+            src?.setData(buildFeatureCollection([]))
+            draftRef.current = {}
+            return
+          }
+
+          // clicking same country: cancel
+          const src = map.getSource('geovisula-link-draft') as mapboxgl.GeoJSONSource | undefined
+          src?.setData(buildFeatureCollection([]))
+          draftRef.current = {}
+          return
+        }
+
+        // default: show popup when not editing
         new mapboxgl.Popup({ closeButton: true, closeOnClick: true })
           .setLngLat(event.lngLat)
           .setHTML(`
@@ -197,6 +279,7 @@ export default function MapView({ mapId }: Props) {
             <div>${properties.countryName}</div>
           `)
           .addTo(map)
+
       })
 
       map.on('mouseenter', 'geovisula-links-line', () => {
@@ -210,6 +293,38 @@ export default function MapView({ mapId }: Props) {
       })
       map.on('mouseleave', 'geovisula-countries-circle', () => {
         map.getCanvas().style.cursor = ''
+      })
+
+      // mouse move updates temporary draft line when a draft is active
+      map.on('mousemove', (event) => {
+        if (!draftRef.current.fromCoords) {
+          return
+        }
+
+        const toCoords: [number, number] = [event.lngLat.lng, event.lngLat.lat]
+        draftRef.current.toCoords = toCoords
+        const src = map.getSource('geovisula-link-draft') as mapboxgl.GeoJSONSource | undefined
+        const lineCoords = buildArcCoordinates(draftRef.current.fromCoords as [number, number], toCoords)
+        src?.setData(buildFeatureCollection([{
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: lineCoords },
+          properties: {} as any,
+        }]))
+      })
+
+      // clicking on map background cancels a draft
+      map.on('click', (event) => {
+        // if clicked a rendered feature, ignore — layer-specific handlers run first
+        const features = map.queryRenderedFeatures(event.point, { layers: ['geovisula-countries-circle', 'geovisula-links-line'] })
+        if (features.length > 0) {
+          return
+        }
+
+        if (draftRef.current.fromCoords) {
+          const src = map.getSource('geovisula-link-draft') as mapboxgl.GeoJSONSource | undefined
+          src?.setData(buildFeatureCollection([]))
+          draftRef.current = {}
+        }
       })
     })
 
@@ -258,9 +373,11 @@ export default function MapView({ mapId }: Props) {
         setMapInfo(map)
         setLinkTypes(linkTypesResponse)
 
-        const countryByIso = new Map<string, EnrichedCountry>()
+        const countryByPointId = new Map<number, EnrichedCountry>()
         countriesWithCoordinates.forEach((country) => {
-          countryByIso.set(country.iso_id, country)
+          if (country.capital_point_id !== null && country.capital_point_id !== undefined) {
+            countryByPointId.set(country.capital_point_id, country)
+          }
         })
 
         const linkTypeById = new Map<number, LinkType>()
@@ -285,8 +402,8 @@ export default function MapView({ mapId }: Props) {
         const lineFeatures: GeoJSON.Feature<GeoJSON.LineString, LinkFeatureProperties>[] = []
         linksResponse.forEach((links) => {
           links.forEach((link) => {
-            const fromCountry = countryByIso.get(String(link.from_country))
-            const toCountry = countryByIso.get(String(link.to_country))
+            const fromCountry = countryByPointId.get(link.from_country)
+            const toCountry = countryByPointId.get(link.to_country)
             const linkType = linkTypeById.get(link.link_type)
 
             if (!fromCountry || !toCountry || !linkType) {
@@ -385,7 +502,7 @@ export default function MapView({ mapId }: Props) {
       )}
 
       {mapboxToken && mapId && (status || error) && (
-        <div style={{ position: 'absolute', left: 16, bottom: 16, zIndex: 30 }}>
+        <div style={{ position: 'absolute', left: 16, bottom: 40, zIndex: 30 }}>
           <div style={statusPanelStyle(error ? '#b91c1c' : '#0f766e')}>{error || status}</div>
         </div>
       )}
@@ -445,6 +562,7 @@ const statusPanelStyle = (borderColor: string): React.CSSProperties => ({
   border: `1px solid ${borderColor}`,
   boxShadow: '0 8px 24px rgba(15, 23, 42, 0.12)',
   fontSize: 13,
+  animation: 'fadeout 5s ease-out 5s forwards',
 })
 
 const infoPanelStyle: React.CSSProperties = {

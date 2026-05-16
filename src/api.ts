@@ -144,6 +144,30 @@ export const api = {
     return requestJson<MapRecord>(`${BASE}/api/maps/${mapId}`)
   },
 
+  async updateMap(mapId: number, data: {
+    name: string
+    name_ja: string
+    owner_id: number
+    read_permission: string
+    edit_permission: string
+    exist_from: string
+    exist_until: string
+    time_scale: string
+    summary: string
+    summary_jp: string
+    regulations: string
+  }) {
+    return requestJson<MapRecord>(`${BASE}/api/maps/${mapId}`, {
+      method: 'PUT',
+      headers: buildHeaders(true),
+      body: JSON.stringify({
+        ...data,
+        exist_from: data.exist_from,
+        exist_until: data.exist_until,
+      }),
+    })
+  },
+
   async isMapEditable(mapId: number) {
     return requestJson<{ editable: boolean }>(`${BASE}/api/maps/${mapId}/editable`, {
       headers: buildHeaders(),
@@ -152,6 +176,51 @@ export const api = {
 
   async getLinkTypes(mapId: number) {
     return requestJson<LinkType[]>(`${BASE}/api/link_types?map_id=${encodeURIComponent(mapId)}`)
+  },
+
+  async createLinkType(data: {
+    name: string
+    name_ja: string
+    map_id: number
+    color: string
+    animated: boolean
+  }) {
+    return requestJson<LinkType>(`${BASE}/api/link_types`, {
+      method: 'POST',
+      headers: buildHeaders(true),
+      body: JSON.stringify(data),
+    })
+  },
+
+  async updateLinkType(linkTypeId: number, data: {
+    name: string
+    name_ja: string
+    map_id: number
+    color: string
+    animated: boolean
+  }) {
+    const params = new URLSearchParams({
+      link_type_id: String(linkTypeId),
+      map_id: String(data.map_id),
+    })
+
+    return requestJson<LinkType>(`${BASE}/api/link_types?${params.toString()}`, {
+      method: 'PUT',
+      headers: buildHeaders(true),
+      body: JSON.stringify(data),
+    })
+  },
+
+  async deleteLinkType(linkTypeId: number, mapId: number) {
+    const params = new URLSearchParams({
+      link_type_id: String(linkTypeId),
+      map_id: String(mapId),
+    })
+
+    return requestJson<{ detail: string }>(`${BASE}/api/link_types?${params.toString()}`, {
+      method: 'DELETE',
+      headers: buildHeaders(),
+    })
   },
 
   async getLinks(mapId: number, linkType: number, date: string) {
