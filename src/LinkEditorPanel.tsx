@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { APP_HEADER_HEIGHT } from './layoutConstants'
 import type { LinkType } from './types'
 
 type Draft = {
@@ -17,10 +18,10 @@ type Props = {
 
 const panelStyle: React.CSSProperties = {
   position: 'fixed',
-  top: 64,
+  top: APP_HEADER_HEIGHT,
   right: 0,
   width: 420,
-  height: 'calc(100vh - 64px)',
+  height: `calc(100vh - ${APP_HEADER_HEIGHT}px)`,
   background: 'rgba(255,255,255,0.98)',
   boxShadow: '-6px 0 28px rgba(15, 23, 42, 0.18)',
   borderLeft: '1px solid rgba(148,163,184,0.3)',
@@ -51,6 +52,12 @@ const buttonStyle = (kind: 'primary' | 'secondary'): React.CSSProperties => ({
 })
 
 export default function LinkEditorPanel({ draft, linkTypes, onClose, onSave }: Props) {
+  useEffect(() => {
+    console.log('LinkEditorPanel mounted with draft:', draft)
+    return () => {
+      console.log('LinkEditorPanel unmounted')
+    }
+  }, [])
   const [linkTypeId, setLinkTypeId] = useState<number>(linkTypes[0]?.id ?? 0)
   const [existFrom, setExistFrom] = useState('1900-01-01')
   const [existUntil, setExistUntil] = useState('9999-12-31')
@@ -64,6 +71,7 @@ export default function LinkEditorPanel({ draft, linkTypes, onClose, onSave }: P
   }, [linkTypes, linkTypeId])
 
   async function handleSave() {
+    console.log('LinkEditorPanel: handleSave start')
     setMessage('')
     if (!linkTypeId) {
       setMessage('リンクタイプを選択してください')
@@ -81,6 +89,7 @@ export default function LinkEditorPanel({ draft, linkTypes, onClose, onSave }: P
     setSaving(true)
     try {
       await onSave({ linkTypeId, existFrom, existUntil })
+      console.log('LinkEditorPanel: onSave succeeded, calling onClose')
       onClose()
     } catch (error) {
       setMessage(error instanceof Error ? error.message : '保存に失敗しました')
@@ -96,7 +105,7 @@ export default function LinkEditorPanel({ draft, linkTypes, onClose, onSave }: P
           <div style={{ fontSize: 12, color: '#64748b' }}>リンク作成</div>
           <h3 style={{ margin: '4px 0 0', fontSize: 18 }}>新しいリンクを編集</h3>
         </div>
-        <button onClick={onClose} style={{ ...buttonStyle('secondary'), width: 40, height: 40, padding: 0 }}>
+        <button onClick={() => { console.log('LinkEditorPanel: close button clicked'); onClose() }} style={{ ...buttonStyle('secondary'), width: 40, height: 40, padding: 0 }}>
           ✕
         </button>
       </div>

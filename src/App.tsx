@@ -7,6 +7,7 @@ import LinkTypesPanel from './LinkTypesPanel'
 import LoginPage from './LoginPage'
 import MapView from './MapView'
 import LinkEditorPanel from './LinkEditorPanel'
+import { APP_HEADER_HEIGHT } from './layoutConstants'
 import type { Country, CountryCoordinates, CountryEditorEntry, LinkType, MapRecord } from './types'
 
 export default function App() {
@@ -154,6 +155,7 @@ export default function App() {
   }
 
   async function handleLinkCreate(payload: { fromCountryId: string; toCountryId: string; fromCoords: [number, number]; toCoords: [number, number] }) {
+    console.log('handleLinkCreate:', payload)
     setLinkDraft(payload)
   }
 
@@ -178,8 +180,9 @@ export default function App() {
       exist_from: form.existFrom,
       exist_until: form.existUntil,
     })
-
-    setLinkDraft(null)
+    
+    // Do not clear `linkDraft` here. Clearing is handled by LinkEditorPanel via `onClose`
+    // after a successful save, so the draft remains visible until the panel closes.
   }
 
   function handleLogout() {
@@ -219,17 +222,16 @@ export default function App() {
   }
 
   return (
-    <div style={{ position: 'relative', height: '100vh', overflow: 'hidden', background: '#08111f' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#08111f' }}>
       <div
         style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          zIndex: 1000,
+          position: 'relative',
+          zIndex: 40,
           background: 'rgba(8, 17, 31, 0.88)',
           color: 'white',
-          padding: '10px 16px',
+          height: APP_HEADER_HEIGHT,
+          padding: '0 16px',
+          boxSizing: 'border-box',
           display: 'flex',
           alignItems: 'center',
           gap: 12,
@@ -359,16 +361,24 @@ export default function App() {
         </button>
       </div>
 
-      <MapView mapId={selectedMapId} editMode={editMode} onLinkCreate={handleLinkCreate} />
+      <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
+        <MapView mapId={selectedMapId} editMode={editMode} onLinkCreate={handleLinkCreate} activeDraft={linkDraft} />
+      </div>
 
       {linkDraft && selectedMap && (
         <LinkEditorPanel
           draft={linkDraft}
           linkTypes={linkTypes}
-          onClose={() => setLinkDraft(null)}
+          onClose={() => {
+            console.log('App: LinkEditorPanel onClose -> clearing linkDraft')
+            setLinkDraft(null)
+          }}
           onSave={handleLinkSave}
         />
       )}
+
+      {/* debug: log linkDraft changes */}
+      <DebugLogger linkDraft={linkDraft} />
 
       {showMapEditor && selectedMap && (
         <EditMapPanel
@@ -404,4 +414,11 @@ export default function App() {
       )}
     </div>
   )
+}
+
+function DebugLogger({ linkDraft }: { linkDraft: any }) {
+  useEffect(() => {
+    console.log('DebugLogger: linkDraft changed ->', linkDraft)
+  }, [linkDraft])
+  return null
 }

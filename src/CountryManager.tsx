@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { api } from './api'
+import { APP_HEADER_HEIGHT } from './layoutConstants'
 
 type Country = { id: string; name_ja: string; lat: number; lng: number }
 
@@ -11,8 +12,8 @@ type Props = {
 }
 
 const panelStyle: React.CSSProperties = {
-  position: 'fixed', top: 0, right: 0, width: 440,
-  height: '100vh', background: 'white', overflowY: 'auto',
+  position: 'fixed', top: APP_HEADER_HEIGHT, right: 0, width: 440,
+  height: `calc(100vh - ${APP_HEADER_HEIGHT}px)`, background: 'white', overflowY: 'auto',
   boxShadow: '-4px 0 24px rgba(0,0,0,0.15)', padding: 24, zIndex: 2000,
 }
 const inputStyle: React.CSSProperties = {

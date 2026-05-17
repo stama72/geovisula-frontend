@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from './api'
+import { APP_HEADER_HEIGHT } from './layoutConstants'
 import type { LinkType } from './types'
 
 type Props = {
@@ -20,10 +21,10 @@ const palette = ['#2563eb', '#0ea5e9', '#14b8a6', '#22c55e', '#eab308', '#f97316
 
 const panelStyle: React.CSSProperties = {
   position: 'fixed',
-  top: 64,
+  top: APP_HEADER_HEIGHT,
   right: 0,
   width: 460,
-  height: 'calc(100vh - 64px)',
+  height: `calc(100vh - ${APP_HEADER_HEIGHT}px)`,
   background: 'rgba(255,255,255,0.98)',
   boxShadow: '-6px 0 28px rgba(15, 23, 42, 0.18)',
   borderLeft: '1px solid rgba(148,163,184,0.3)',

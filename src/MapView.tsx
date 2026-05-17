@@ -15,6 +15,8 @@ type Props = {
   editMode?: boolean
   // Called when a new link draft is completed (fromCountryId, toCountryId, coords)
   onLinkCreate?: (payload: { fromCountryId: string; toCountryId: string; fromCoords: [number, number]; toCoords: [number, number] }) => void
+  // Parent can pass the currently active draft; when it becomes null, MapView should clear visualization
+  activeDraft?: { fromCountryId: string; toCountryId: string; fromCoords: [number, number]; toCoords: [number, number] } | null
 }
 
 type LinkFeatureProperties = {
@@ -75,7 +77,7 @@ function formatDateLabel(value: string | null) {
   return value.slice(0, 10)
 }
 
-export default function MapView({ mapId, editMode = false, onLinkCreate }: Props) {
+export default function MapView({ mapId, editMode = false, onLinkCreate, activeDraft }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<mapboxgl.Map | null>(null)
   const [mapInfo, setMapInfo] = useState<MapRecord | null>(null)
@@ -86,11 +88,17 @@ export default function MapView({ mapId, editMode = false, onLinkCreate }: Props
   const editModeRef = useRef<boolean>(editMode)
   // mutable draft state used by map event handlers to avoid re-renders
   const draftRef = useRef<{ fromCountryId?: string; fromCoords?: [number, number]; toCoords?: [number, number] }>({})
+  // ref to reflect parent's activeDraft prop inside event handlers
+  const activeDraftRef = useRef<any>(null)
 
   useEffect(() => {
     // keep ref in sync so map event handlers use latest editMode
     editModeRef.current = editMode
   }, [editMode])
+
+  useEffect(() => {
+    activeDraftRef.current = activeDraft
+  }, [activeDraft])
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current || !mapboxToken) {
@@ -102,7 +110,7 @@ export default function MapView({ mapId, editMode = false, onLinkCreate }: Props
       container: containerRef.current,
       style: 'mapbox://styles/mapbox/standard',
       center: [139.6917, 35.6895],
-      zoom: 1.7,
+      zoom: 2,
       antialias: true,
     })
 
@@ -237,6 +245,7 @@ export default function MapView({ mapId, editMode = false, onLinkCreate }: Props
 
           if (!draftRef.current.fromCountryId) {
             // start draft
+            console.log('MapView: start draft', { countryId, coords })
             draftRef.current = { fromCountryId: countryId, fromCoords: coords }
             const src = map.getSource('geovisula-link-draft') as mapboxgl.GeoJSONSource | undefined
             src?.setData(buildFeatureCollection([{
@@ -254,19 +263,23 @@ export default function MapView({ mapId, editMode = false, onLinkCreate }: Props
             const toCountryId = countryId
             const toCoords = coords
 
-            // notify parent to open editor / create draft
-            onLinkCreate?.({ fromCountryId, toCountryId, fromCoords, toCoords })
+              // notify parent to open editor / create draft
+              console.log('MapView: completing draft -> calling onLinkCreate', { fromCountryId, toCountryId, fromCoords, toCoords })
+              onLinkCreate?.({ fromCountryId, toCountryId, fromCoords, toCoords })
 
-            // clear draft visualization
-            const src = map.getSource('geovisula-link-draft') as mapboxgl.GeoJSONSource | undefined
-            src?.setData(buildFeatureCollection([]))
-            draftRef.current = {}
+              // NOTE: do NOT clear draft visualization here. Keep the draft visible until
+              // the parent component (App) clears its `linkDraft` (passed via `activeDraft`).
+              // Clearing immediately here made the draft disappear when the editor opened.
+              // We'll clear visualization in an effect that watches `props.activeDraft`.
+              console.log('MapView: leaving draft visualization in place for editor')
+              // leave draftRef.current intact
             return
           }
 
           // clicking same country: cancel
           const src = map.getSource('geovisula-link-draft') as mapboxgl.GeoJSONSource | undefined
           src?.setData(buildFeatureCollection([]))
+          console.log('MapView: cancelled draft by clicking same country -> clearing draftRef')
           draftRef.current = {}
           return
         }
@@ -297,6 +310,11 @@ export default function MapView({ mapId, editMode = false, onLinkCreate }: Props
 
       // mouse move updates temporary draft line when a draft is active
       map.on('mousemove', (event) => {
+        // If parent opened the editor and provided an activeDraft, stop updating
+        if (activeDraftRef.current) {
+          return
+        }
+
         if (!draftRef.current.fromCoords) {
           return
         }
@@ -323,9 +341,13 @@ export default function MapView({ mapId, editMode = false, onLinkCreate }: Props
         if (draftRef.current.fromCoords) {
           const src = map.getSource('geovisula-link-draft') as mapboxgl.GeoJSONSource | undefined
           src?.setData(buildFeatureCollection([]))
+          console.log('MapView: cancelled draft by clicking background -> clearing draftRef')
           draftRef.current = {}
         }
       })
+
+    // watch for parent-controlled activeDraft changes to clear or restore visualization
+    // (handled below via React effect outside of map.on('load')).
     })
 
     return () => {
@@ -334,6 +356,34 @@ export default function MapView({ mapId, editMode = false, onLinkCreate }: Props
       mapRef.current = null
     }
   }, [mapboxToken])
+  // Parent can pass `activeDraft` to control whether the draft visualization should remain.
+  // When `activeDraft` becomes null, clear the draft visualization and internal draftRef.
+  useEffect(() => {
+    if (!mapRef.current) return
+    const map = mapRef.current
+    const src = map.getSource('geovisula-link-draft') as mapboxgl.GeoJSONSource | undefined
+    if (!src) return
+
+    if (!activeDraft) {
+      // Parent cleared the draft: remove visualization
+      src.setData(buildFeatureCollection([]))
+      draftRef.current = {}
+      console.log('MapView: activeDraft is null -> cleared draft visualization')
+      return
+    }
+
+    // Parent provided an active draft: ensure visualization matches
+    const from = activeDraft.fromCoords
+    const to = activeDraft.toCoords ?? activeDraft.fromCoords
+    const lineCoords = buildArcCoordinates(from, to)
+    src.setData(buildFeatureCollection([{
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: lineCoords },
+      properties: {} as any,
+    }]))
+    draftRef.current = { fromCountryId: activeDraft.fromCountryId, fromCoords: activeDraft.fromCoords, toCoords: activeDraft.toCoords }
+    console.log('MapView: activeDraft present -> restored draft visualization')
+  }, [activeDraft])
 
   useEffect(() => {
     if (!mapRef.current || mapId === null) {
@@ -438,22 +488,6 @@ export default function MapView({ mapId, editMode = false, onLinkCreate }: Props
         const countriesSource = mapInstance.getSource('geovisula-countries') as mapboxgl.GeoJSONSource | undefined
         linksSource?.setData(buildFeatureCollection(lineFeatures))
         countriesSource?.setData(buildFeatureCollection(countryFeatures))
-
-        if (countryFeatures.length > 0) {
-          const bounds = new mapboxgl.LngLatBounds()
-          countryFeatures.forEach((feature) => {
-            const [lng, lat] = feature.geometry.coordinates
-            bounds.extend([lng, lat])
-          })
-
-          if (!bounds.isEmpty()) {
-            mapInstance.fitBounds(bounds, {
-              padding: { top: 96, bottom: 64, left: 64, right: 64 },
-              duration: 700,
-              maxZoom: 4.5,
-            })
-          }
-        }
 
         setStatus(`${countriesWithCoordinates.length}件の国と${lineFeatures.length}件のリンクを描画しました`)
       } catch (err) {
@@ -568,7 +602,7 @@ const statusPanelStyle = (borderColor: string): React.CSSProperties => ({
 const infoPanelStyle: React.CSSProperties = {
   position: 'absolute',
   left: 16,
-  top: 66,
+  top: 12,
   zIndex: 25,
   background: 'rgba(255,255,255,0.96)',
   borderRadius: 14,
