@@ -13,6 +13,14 @@ type Props = {
   mapId: number | null
   editMode?: boolean
   onLinkCreate?: (payload: { fromCountryId: string; toCountryId: string; fromCoords: [number, number]; toCoords: [number, number] }) => void
+  onLinkEdit?: (payload: {
+    linkId: number
+    linkTypeId: number
+    fromCountryId: string
+    toCountryId: string
+    existFrom: string | null
+    existUntil: string | null
+  }) => void
   activeDraft?: { fromCountryId: string; toCountryId: string; fromCoords: [number, number]; toCoords: [number, number] } | null
   refreshLinkTypeId?: number | null
   onLinksRefreshed?: (linkTypeId: number) => void
@@ -70,7 +78,7 @@ function formatDateLabel(value: string | null) {
   return value ? value.slice(0, 10) : 'なし'
 }
 
-export default function MapView({ mapId, editMode = false, onLinkCreate, activeDraft, refreshLinkTypeId, onLinksRefreshed }: Props) {
+export default function MapView({ mapId, editMode = false, onLinkCreate, onLinkEdit, activeDraft, refreshLinkTypeId, onLinksRefreshed }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<mapboxgl.Map | null>(null)
   const [mapInfo, setMapInfo] = useState<MapRecord | null>(null)
@@ -193,6 +201,18 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, activeD
         if (!feature) return
 
         const properties = feature.properties as unknown as LinkFeatureProperties
+        if (editModeRef.current) {
+          onLinkEdit?.({
+            linkId: properties.id,
+            linkTypeId: properties.linkTypeId,
+            fromCountryId: properties.fromCountryId,
+            toCountryId: properties.toCountryId,
+            existFrom: properties.existFrom,
+            existUntil: properties.existUntil,
+          })
+          return
+        }
+
         new mapboxgl.Popup({ closeButton: true, closeOnClick: true })
           .setLngLat(event.lngLat)
           .setHTML(`

@@ -2,18 +2,32 @@ import { useEffect, useState } from 'react'
 import { APP_HEADER_HEIGHT } from './layoutConstants'
 import type { LinkType } from './types'
 
-type Draft = {
+type LinkCreateDraft = {
+  mode: 'create'
   fromCountryId: string
   toCountryId: string
   fromCoords: [number, number]
   toCoords: [number, number]
 }
 
+type LinkEditDraft = {
+  mode: 'edit'
+  linkId: number
+  fromCountryId: string
+  toCountryId: string
+  linkTypeId: number
+  existFrom: string
+  existUntil: string
+}
+
+type Draft = LinkCreateDraft | LinkEditDraft
+
 type Props = {
   draft: Draft
   linkTypes: LinkType[]
   onClose: () => void
   onSave: (form: { linkTypeId: number; existFrom: string; existUntil: string }) => Promise<void>
+  onDelete?: () => Promise<void>
 }
 
 const panelStyle: React.CSSProperties = {
@@ -51,18 +65,33 @@ const buttonStyle = (kind: 'primary' | 'secondary'): React.CSSProperties => ({
   fontWeight: 600,
 })
 
-export default function LinkEditorPanel({ draft, linkTypes, onClose, onSave }: Props) {
+export default function LinkEditorPanel({ draft, linkTypes, onClose, onSave, onDelete }: Props) {
   useEffect(() => {
     console.log('LinkEditorPanel mounted with draft:', draft)
     return () => {
       console.log('LinkEditorPanel unmounted')
     }
   }, [])
-  const [linkTypeId, setLinkTypeId] = useState<number>(linkTypes[0]?.id ?? 0)
-  const [existFrom, setExistFrom] = useState('1900-01-01')
-  const [existUntil, setExistUntil] = useState('9999-12-31')
+  const isEditMode = draft.mode === 'edit'
+  const [linkTypeId, setLinkTypeId] = useState<number>(isEditMode ? draft.linkTypeId : (linkTypes[0]?.id ?? 0))
+  const [existFrom, setExistFrom] = useState(isEditMode ? draft.existFrom : '1900-01-01')
+  const [existUntil, setExistUntil] = useState(isEditMode ? draft.existUntil : '9999-12-31')
   const [message, setMessage] = useState('')
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  useEffect(() => {
+    if (draft.mode === 'edit') {
+      setLinkTypeId(draft.linkTypeId)
+      setExistFrom(draft.existFrom)
+      setExistUntil(draft.existUntil)
+      return
+    }
+
+    setLinkTypeId(linkTypes[0]?.id ?? 0)
+    setExistFrom('1900-01-01')
+    setExistUntil('9999-12-31')
+  }, [draft, linkTypes])
 
   useEffect(() => {
     if (linkTypes.length > 0 && !linkTypes.some((type) => type.id === linkTypeId)) {
@@ -98,12 +127,33 @@ export default function LinkEditorPanel({ draft, linkTypes, onClose, onSave }: P
     }
   }
 
+  async function handleDelete() {
+    if (!onDelete || !isEditMode) {
+      return
+    }
+
+    if (!window.confirm('このリンクを削除しますか？')) {
+      return
+    }
+
+    setMessage('')
+    setDeleting(true)
+    try {
+      await onDelete()
+      onClose()
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '削除に失敗しました')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <aside style={panelStyle}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
         <div>
-          <div style={{ fontSize: 12, color: '#64748b' }}>リンク作成</div>
-          <h3 style={{ margin: '4px 0 0', fontSize: 18 }}>新しいリンクを編集</h3>
+          <div style={{ fontSize: 12, color: '#64748b' }}>{isEditMode ? 'リンク編集' : 'リンク作成'}</div>
+          <h3 style={{ margin: '4px 0 0', fontSize: 18 }}>{isEditMode ? '既存リンクを編集' : '新しいリンクを編集'}</h3>
         </div>
         <button onClick={() => { console.log('LinkEditorPanel: close button clicked'); onClose() }} style={{ ...buttonStyle('secondary'), width: 40, height: 40, padding: 0 }}>
           ✕
@@ -151,10 +201,28 @@ export default function LinkEditorPanel({ draft, linkTypes, onClose, onSave }: P
         <button onClick={handleSave} disabled={saving} style={{ ...buttonStyle('primary'), flex: 1 }}>
           {saving ? '保存中...' : '保存'}
         </button>
-        <button onClick={onClose} style={{ ...buttonStyle('secondary'), flex: 1 }}>
+        <button onClick={onClose} disabled={deleting} style={{ ...buttonStyle('secondary'), flex: 1 }}>
           キャンセル
         </button>
       </div>
+
+      {isEditMode && onDelete && (
+        <div style={{ marginTop: 10 }}>
+          <button
+            onClick={handleDelete}
+            disabled={deleting || saving}
+            style={{
+              ...buttonStyle('secondary'),
+              width: '100%',
+              borderColor: '#ef4444',
+              color: '#b91c1c',
+              fontWeight: 700,
+            }}
+          >
+            {deleting ? '削除中...' : 'リンクを削除'}
+          </button>
+        </div>
+      )}
     </aside>
   )
 }

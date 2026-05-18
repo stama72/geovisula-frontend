@@ -11,6 +11,30 @@ import LinkEditorPanel from './LinkEditorPanel'
 import { APP_HEADER_HEIGHT } from './layoutConstants'
 import type { Country, CountryEditorEntry, LinkType, MapRecord } from './types'
 
+type LinkCreateDraft = {
+  mode: 'create'
+  fromCountryId: string
+  toCountryId: string
+  fromCoords: [number, number]
+  toCoords: [number, number]
+}
+
+type LinkEditDraft = {
+  mode: 'edit'
+  linkId: number
+  fromCountryId: string
+  toCountryId: string
+  linkTypeId: number
+  existFrom: string
+  existUntil: string
+}
+
+type LinkDraft = LinkCreateDraft | LinkEditDraft
+
+function normalizeDateForInput(value: string | null, fallback: string) {
+  return value ? value.slice(0, 10) : fallback
+}
+
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem('token') ?? '')
   const [displayName, setDisplayName] = useState(localStorage.getItem('displayName') ?? '')
@@ -28,12 +52,7 @@ export default function App() {
   const [loadingError, setLoadingError] = useState('')
   const [mapEditable, setMapEditable] = useState(false)
   const [editMode, setEditMode] = useState(false)
-  const [linkDraft, setLinkDraft] = useState<{
-    fromCountryId: string
-    toCountryId: string
-    fromCoords: [number, number]
-    toCoords: [number, number]
-  } | null>(null)
+  const [linkDraft, setLinkDraft] = useState<LinkDraft | null>(null)
 
   const selectedMap = maps.find((map) => map.id === selectedMapId) ?? null
 
@@ -158,7 +177,27 @@ export default function App() {
     console.log('handleLinkCreate:', payload)
     // When starting a link edit, close any open side panels
     setActivePanel(null)
-    setLinkDraft(payload)
+    setLinkDraft({ mode: 'create', ...payload })
+  }
+
+  function handleLinkEdit(payload: {
+    linkId: number
+    linkTypeId: number
+    fromCountryId: string
+    toCountryId: string
+    existFrom: string | null
+    existUntil: string | null
+  }) {
+    setActivePanel(null)
+    setLinkDraft({
+      mode: 'edit',
+      linkId: payload.linkId,
+      linkTypeId: payload.linkTypeId,
+      fromCountryId: payload.fromCountryId,
+      toCountryId: payload.toCountryId,
+      existFrom: normalizeDateForInput(payload.existFrom, '1900-01-01'),
+      existUntil: normalizeDateForInput(payload.existUntil, '9999-12-31'),
+    })
   }
 
   async function handleLinkSave(form: { linkTypeId: number; existFrom: string; existUntil: string }): Promise<void> {
@@ -174,7 +213,20 @@ export default function App() {
       throw new Error('国の首都座標が見つかりません')
     }
 
-    await api.createLink({
+    if (linkDraft.mode === 'create') {
+      await api.createLink({
+        map_id: selectedMapId,
+        link_type: form.linkTypeId,
+        from_country: fromCountry.capital_point_id,
+        to_country: toCountry.capital_point_id,
+        exist_from: form.existFrom,
+        exist_until: form.existUntil,
+      })
+      setRefreshLinkTypeId(form.linkTypeId)
+      return
+    }
+
+    await api.updateLink(linkDraft.linkId, {
       map_id: selectedMapId,
       link_type: form.linkTypeId,
       from_country: fromCountry.capital_point_id,
@@ -182,10 +234,20 @@ export default function App() {
       exist_from: form.existFrom,
       exist_until: form.existUntil,
     })
-    // trigger MapView to refresh links for the updated link type (partial refresh)
-    setRefreshLinkTypeId(form.linkTypeId)
+
+    // Refresh old type first so the moved/updated line is removed from its previous bucket.
+    setRefreshLinkTypeId(linkDraft.linkTypeId)
     // Do not clear `linkDraft` here. Clearing is handled by LinkEditorPanel via `onClose`
     // after a successful save, so the draft remains visible until the panel closes.
+  }
+
+  async function handleLinkDelete(): Promise<void> {
+    if (!linkDraft || linkDraft.mode !== 'edit') {
+      return
+    }
+
+    await api.deleteLink(linkDraft.linkId)
+    setRefreshLinkTypeId(linkDraft.linkTypeId)
   }
 
   function handleLogout() {
@@ -380,7 +442,8 @@ export default function App() {
           mapId={selectedMapId}
           editMode={editMode}
           onLinkCreate={handleLinkCreate}
-          activeDraft={linkDraft}
+          onLinkEdit={handleLinkEdit}
+          activeDraft={linkDraft?.mode === 'create' ? linkDraft : null}
           refreshLinkTypeId={refreshLinkTypeId}
           onLinksRefreshed={() => {
             // clear the trigger once MapView handled the partial refresh
@@ -398,6 +461,7 @@ export default function App() {
             setLinkDraft(null)
           }}
           onSave={handleLinkSave}
+          onDelete={linkDraft.mode === 'edit' ? handleLinkDelete : undefined}
         />
       )}
 
