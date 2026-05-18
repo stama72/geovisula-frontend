@@ -11,12 +11,11 @@ type EnrichedCountry = Country & {
 
 type Props = {
   mapId: number | null
-  // When true, enable interactive link creation (click country A -> move -> click country B)
   editMode?: boolean
-  // Called when a new link draft is completed (fromCountryId, toCountryId, coords)
   onLinkCreate?: (payload: { fromCountryId: string; toCountryId: string; fromCoords: [number, number]; toCoords: [number, number] }) => void
-  // Parent can pass the currently active draft; when it becomes null, MapView should clear visualization
   activeDraft?: { fromCountryId: string; toCountryId: string; fromCoords: [number, number]; toCoords: [number, number] } | null
+  refreshLinkTypeId?: number | null
+  onLinksRefreshed?: (linkTypeId: number) => void
 }
 
 type LinkFeatureProperties = {
@@ -64,35 +63,29 @@ function buildArcCoordinates(from: [number, number], to: [number, number], segme
 }
 
 function buildFeatureCollection<T>(features: GeoJSON.Feature<GeoJSON.Geometry, T>[]): GeoJSON.FeatureCollection<GeoJSON.Geometry, T> {
-  return {
-    type: 'FeatureCollection',
-    features,
-  }
+  return { type: 'FeatureCollection', features }
 }
 
 function formatDateLabel(value: string | null) {
-  if (!value) {
-    return 'なし'
-  }
-  return value.slice(0, 10)
+  return value ? value.slice(0, 10) : 'なし'
 }
 
-export default function MapView({ mapId, editMode = false, onLinkCreate, activeDraft }: Props) {
+export default function MapView({ mapId, editMode = false, onLinkCreate, activeDraft, refreshLinkTypeId, onLinksRefreshed }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<mapboxgl.Map | null>(null)
   const [mapInfo, setMapInfo] = useState<MapRecord | null>(null)
   const [linkTypes, setLinkTypes] = useState<LinkType[]>([])
   const [status, setStatus] = useState('')
   const [error, setError] = useState('')
+  const [mapReady, setMapReady] = useState(false)
   const mapboxToken = useMemo(() => import.meta.env.VITE_MAPBOX_TOKEN as string | undefined, [])
-  const editModeRef = useRef<boolean>(editMode)
-  // mutable draft state used by map event handlers to avoid re-renders
+  const editModeRef = useRef(editMode)
   const draftRef = useRef<{ fromCountryId?: string; fromCoords?: [number, number]; toCoords?: [number, number] }>({})
-  // ref to reflect parent's activeDraft prop inside event handlers
-  const activeDraftRef = useRef<any>(null)
+  const activeDraftRef = useRef<typeof activeDraft>(null)
+  const countryByPointIdRef = useRef<Map<number, EnrichedCountry> | null>(null)
+  const linksFeaturesRef = useRef<GeoJSON.Feature<GeoJSON.LineString, LinkFeatureProperties>[]>([])
 
   useEffect(() => {
-    // keep ref in sync so map event handlers use latest editMode
     editModeRef.current = editMode
   }, [editMode])
 
@@ -122,17 +115,11 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, activeD
 
     map.on('load', () => {
       if (!map.getSource('geovisula-links')) {
-        map.addSource('geovisula-links', {
-          type: 'geojson',
-          data: buildFeatureCollection<LinkFeatureProperties>([]),
-        })
+        map.addSource('geovisula-links', { type: 'geojson', data: buildFeatureCollection<LinkFeatureProperties>([]) })
       }
 
       if (!map.getSource('geovisula-countries')) {
-        map.addSource('geovisula-countries', {
-          type: 'geojson',
-          data: buildFeatureCollection<CountryFeatureProperties>([]),
-        })
+        map.addSource('geovisula-countries', { type: 'geojson', data: buildFeatureCollection<CountryFeatureProperties>([]) })
       }
 
       if (!map.getLayer('geovisula-links-line')) {
@@ -140,10 +127,7 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, activeD
           id: 'geovisula-links-line',
           type: 'line',
           source: 'geovisula-links',
-          layout: {
-            'line-cap': 'round',
-            'line-join': 'round',
-          },
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
           paint: {
             'line-color': ['coalesce', ['get', 'color'], '#2563eb'],
             'line-width': ['case', ['boolean', ['get', 'animated'], false], 3.5, 2.5],
@@ -185,12 +169,8 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, activeD
         })
       }
 
-      // source/layer for temporary link draft while creating a new link
       if (!map.getSource('geovisula-link-draft')) {
-        map.addSource('geovisula-link-draft', {
-          type: 'geojson',
-          data: buildFeatureCollection<LinkFeatureProperties>([]),
-        })
+        map.addSource('geovisula-link-draft', { type: 'geojson', data: buildFeatureCollection<LinkFeatureProperties>([]) })
       }
 
       if (!map.getLayer('geovisula-link-draft-line')) {
@@ -198,10 +178,7 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, activeD
           id: 'geovisula-link-draft-line',
           type: 'line',
           source: 'geovisula-link-draft',
-          layout: {
-            'line-cap': 'round',
-            'line-join': 'round',
-          },
+          layout: { 'line-cap': 'round', 'line-join': 'round' },
           paint: {
             'line-color': '#111827',
             'line-width': 3,
@@ -213,9 +190,7 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, activeD
 
       map.on('click', 'geovisula-links-line', (event) => {
         const feature = event.features?.[0]
-        if (!feature) {
-          return
-        }
+        if (!feature) return
 
         const properties = feature.properties as unknown as LinkFeatureProperties
         new mapboxgl.Popup({ closeButton: true, closeOnClick: true })
@@ -231,21 +206,16 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, activeD
 
       map.on('click', 'geovisula-countries-circle', (event) => {
         const feature = event.features?.[0]
-        if (!feature) {
-          return
-        }
+        if (!feature) return
 
         const properties = feature.properties as unknown as CountryFeatureProperties
 
-        // If edit mode is enabled, use clicks to start/complete draft links.
         if (editModeRef.current) {
           const countryId = properties.countryId
           const geom = feature.geometry as GeoJSON.Point
           const coords = geom.coordinates as [number, number]
 
           if (!draftRef.current.fromCountryId) {
-            // start draft
-            console.log('MapView: start draft', { countryId, coords })
             draftRef.current = { fromCountryId: countryId, fromCoords: coords }
             const src = map.getSource('geovisula-link-draft') as mapboxgl.GeoJSONSource | undefined
             src?.setData(buildFeatureCollection([{
@@ -256,35 +226,21 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, activeD
             return
           }
 
-          // completing draft: ignore click on same country
           if (draftRef.current.fromCountryId && draftRef.current.fromCountryId !== countryId) {
             const fromCountryId = draftRef.current.fromCountryId
             const fromCoords = draftRef.current.fromCoords as [number, number]
             const toCountryId = countryId
             const toCoords = coords
-
-              // notify parent to open editor / create draft
-              console.log('MapView: completing draft -> calling onLinkCreate', { fromCountryId, toCountryId, fromCoords, toCoords })
-              onLinkCreate?.({ fromCountryId, toCountryId, fromCoords, toCoords })
-
-              // NOTE: do NOT clear draft visualization here. Keep the draft visible until
-              // the parent component (App) clears its `linkDraft` (passed via `activeDraft`).
-              // Clearing immediately here made the draft disappear when the editor opened.
-              // We'll clear visualization in an effect that watches `props.activeDraft`.
-              console.log('MapView: leaving draft visualization in place for editor')
-              // leave draftRef.current intact
+            onLinkCreate?.({ fromCountryId, toCountryId, fromCoords, toCoords })
             return
           }
 
-          // clicking same country: cancel
           const src = map.getSource('geovisula-link-draft') as mapboxgl.GeoJSONSource | undefined
           src?.setData(buildFeatureCollection([]))
-          console.log('MapView: cancelled draft by clicking same country -> clearing draftRef')
           draftRef.current = {}
           return
         }
 
-        // default: show popup when not editing
         new mapboxgl.Popup({ closeButton: true, closeOnClick: true })
           .setLngLat(event.lngLat)
           .setHTML(`
@@ -292,30 +248,15 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, activeD
             <div>${properties.countryName}</div>
           `)
           .addTo(map)
-
       })
 
-      map.on('mouseenter', 'geovisula-links-line', () => {
-        map.getCanvas().style.cursor = 'pointer'
-      })
-      map.on('mouseleave', 'geovisula-links-line', () => {
-        map.getCanvas().style.cursor = ''
-      })
-      map.on('mouseenter', 'geovisula-countries-circle', () => {
-        map.getCanvas().style.cursor = 'pointer'
-      })
-      map.on('mouseleave', 'geovisula-countries-circle', () => {
-        map.getCanvas().style.cursor = ''
-      })
+      map.on('mouseenter', 'geovisula-links-line', () => { map.getCanvas().style.cursor = 'pointer' })
+      map.on('mouseleave', 'geovisula-links-line', () => { map.getCanvas().style.cursor = '' })
+      map.on('mouseenter', 'geovisula-countries-circle', () => { map.getCanvas().style.cursor = 'pointer' })
+      map.on('mouseleave', 'geovisula-countries-circle', () => { map.getCanvas().style.cursor = '' })
 
-      // mouse move updates temporary draft line when a draft is active
       map.on('mousemove', (event) => {
-        // If parent opened the editor and provided an activeDraft, stop updating
-        if (activeDraftRef.current) {
-          return
-        }
-
-        if (!draftRef.current.fromCoords) {
+        if (activeDraftRef.current || !draftRef.current.fromCoords) {
           return
         }
 
@@ -330,34 +271,28 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, activeD
         }]))
       })
 
-      // clicking on map background cancels a draft
       map.on('click', (event) => {
-        // if clicked a rendered feature, ignore — layer-specific handlers run first
         const features = map.queryRenderedFeatures(event.point, { layers: ['geovisula-countries-circle', 'geovisula-links-line'] })
-        if (features.length > 0) {
-          return
-        }
+        if (features.length > 0) return
 
         if (draftRef.current.fromCoords) {
           const src = map.getSource('geovisula-link-draft') as mapboxgl.GeoJSONSource | undefined
           src?.setData(buildFeatureCollection([]))
-          console.log('MapView: cancelled draft by clicking background -> clearing draftRef')
           draftRef.current = {}
         }
       })
 
-    // watch for parent-controlled activeDraft changes to clear or restore visualization
-    // (handled below via React effect outside of map.on('load')).
+      setMapReady(true)
     })
 
     return () => {
       window.removeEventListener('resize', resize)
       map.remove()
       mapRef.current = null
+      setMapReady(false)
     }
   }, [mapboxToken])
-  // Parent can pass `activeDraft` to control whether the draft visualization should remain.
-  // When `activeDraft` becomes null, clear the draft visualization and internal draftRef.
+
   useEffect(() => {
     if (!mapRef.current) return
     const map = mapRef.current
@@ -365,30 +300,23 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, activeD
     if (!src) return
 
     if (!activeDraft) {
-      // Parent cleared the draft: remove visualization
       src.setData(buildFeatureCollection([]))
       draftRef.current = {}
-      console.log('MapView: activeDraft is null -> cleared draft visualization')
       return
     }
 
-    // Parent provided an active draft: ensure visualization matches
     const from = activeDraft.fromCoords
     const to = activeDraft.toCoords ?? activeDraft.fromCoords
-    const lineCoords = buildArcCoordinates(from, to)
     src.setData(buildFeatureCollection([{
       type: 'Feature',
-      geometry: { type: 'LineString', coordinates: lineCoords },
+      geometry: { type: 'LineString', coordinates: buildArcCoordinates(from, to) },
       properties: {} as any,
     }]))
     draftRef.current = { fromCountryId: activeDraft.fromCountryId, fromCoords: activeDraft.fromCoords, toCoords: activeDraft.toCoords }
-    console.log('MapView: activeDraft present -> restored draft visualization')
   }, [activeDraft])
 
   useEffect(() => {
-    if (!mapRef.current || mapId === null) {
-      return
-    }
+    if (!mapRef.current || mapId === null || !mapReady) return
 
     let cancelled = false
     const activeMapId = mapId
@@ -404,21 +332,19 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, activeD
           api.getLinkTypes(activeMapId),
         ])
 
-        const countriesWithCoordinates: EnrichedCountry[] = await Promise.all(
-          countries.map(async (country) => ({
-            ...country,
-            ...(await api.getCountryCoordinates(country.iso_id)),
-          })),
-        )
+        const coordMap = await api.getCountriesCoordinates()
+        const countriesWithCoordinates: EnrichedCountry[] = countries.map((country) => ({
+          ...country,
+          lat: coordMap[country.iso_id]?.lat ?? 0,
+          lng: coordMap[country.iso_id]?.lng ?? 0,
+        }))
 
         const currentDate = new Date().toISOString()
         const linksResponse: RelationLink[][] = await Promise.all(
           linkTypesResponse.map((linkType) => api.getLinks(activeMapId, linkType.id, currentDate)),
         )
 
-        if (cancelled || !mapRef.current) {
-          return
-        }
+        if (cancelled || !mapRef.current) return
 
         setMapInfo(map)
         setLinkTypes(linkTypesResponse)
@@ -429,6 +355,7 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, activeD
             countryByPointId.set(country.capital_point_id, country)
           }
         })
+        countryByPointIdRef.current = countryByPointId
 
         const linkTypeById = new Map<number, LinkType>()
         linkTypesResponse.forEach((linkType) => {
@@ -437,10 +364,7 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, activeD
 
         const countryFeatures: GeoJSON.Feature<GeoJSON.Point, CountryFeatureProperties>[] = countriesWithCoordinates.map((country) => ({
           type: 'Feature',
-          geometry: {
-            type: 'Point',
-            coordinates: [country.lng, country.lat],
-          },
+          geometry: { type: 'Point', coordinates: [country.lng, country.lat] },
           properties: {
             countryId: country.iso_id,
             countryName: country.name,
@@ -455,10 +379,7 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, activeD
             const fromCountry = countryByPointId.get(link.from_country)
             const toCountry = countryByPointId.get(link.to_country)
             const linkType = linkTypeById.get(link.link_type)
-
-            if (!fromCountry || !toCountry || !linkType) {
-              return
-            }
+            if (!fromCountry || !toCountry || !linkType) return
 
             lineFeatures.push({
               type: 'Feature',
@@ -484,9 +405,11 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, activeD
         })
 
         const mapInstance = mapRef.current
+        if (!mapInstance) return
         const linksSource = mapInstance.getSource('geovisula-links') as mapboxgl.GeoJSONSource | undefined
         const countriesSource = mapInstance.getSource('geovisula-countries') as mapboxgl.GeoJSONSource | undefined
         linksSource?.setData(buildFeatureCollection(lineFeatures))
+        linksFeaturesRef.current = lineFeatures
         countriesSource?.setData(buildFeatureCollection(countryFeatures))
 
         setStatus(`${countriesWithCoordinates.length}件の国と${lineFeatures.length}件のリンクを描画しました`)
@@ -503,19 +426,78 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, activeD
     return () => {
       cancelled = true
     }
-  }, [mapId])
+  }, [mapId, mapReady])
+
+  useEffect(() => {
+    if (!mapRef.current || mapId === null || refreshLinkTypeId == null) return
+
+    let cancelled = false
+
+    void (async () => {
+      try {
+        const currentDate = new Date().toISOString()
+        const links = await api.getLinks(mapId, refreshLinkTypeId, currentDate)
+        const countryByPointId = countryByPointIdRef.current
+        const linkType = linkTypes.find((item) => item.id === refreshLinkTypeId)
+        if (!countryByPointId || !linkType) return
+
+        const newFeatures: GeoJSON.Feature<GeoJSON.LineString, LinkFeatureProperties>[] = []
+        links.forEach((link) => {
+          const fromCountry = countryByPointId.get(link.from_country)
+          const toCountry = countryByPointId.get(link.to_country)
+          if (!fromCountry || !toCountry) return
+
+          newFeatures.push({
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: buildArcCoordinates([fromCountry.lng, fromCountry.lat], [toCountry.lng, toCountry.lat]),
+            },
+            properties: {
+              id: link.id,
+              linkTypeId: linkType.id,
+              linkTypeName: linkType.name_ja || linkType.name,
+              fromCountryId: fromCountry.iso_id,
+              toCountryId: toCountry.iso_id,
+              fromCountryName: fromCountry.name_ja,
+              toCountryName: toCountry.name_ja,
+              color: linkType.color,
+              animated: linkType.animated,
+              existFrom: link.exist_from,
+              existUntil: link.exist_until,
+            },
+          })
+        })
+
+        const mapInstance = mapRef.current as mapboxgl.Map
+        const linksSource = mapInstance.getSource('geovisula-links') as mapboxgl.GeoJSONSource | undefined
+        if (!linksSource) return
+
+        const kept = linksFeaturesRef.current.filter((feature) => (feature.properties?.linkTypeId as number) !== refreshLinkTypeId)
+        const merged = [...kept, ...newFeatures]
+        linksSource.setData(buildFeatureCollection(merged))
+        linksFeaturesRef.current = merged
+        onLinksRefreshed?.(refreshLinkTypeId)
+        if (!cancelled) {
+          setStatus(`${merged.length}件のリンクを描画しました`)
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'リンクの再取得に失敗しました')
+        }
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [refreshLinkTypeId, mapId, linkTypes, onLinksRefreshed])
 
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
       <div
         ref={containerRef}
-        style={{
-          position: 'absolute',
-          inset: 0,
-          width: '100%',
-          height: '100%',
-          background: '#dbeafe',
-        }}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', background: '#dbeafe' }}
       />
 
       {!mapboxToken && (
@@ -545,17 +527,20 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, activeD
         <div style={infoPanelStyle}>
           <div style={{ fontSize: 12, color: '#6b7280' }}>現在のマップ</div>
           <div style={{ fontWeight: 700, marginTop: 4 }}>{mapInfo.name_ja}</div>
-          <div style={{ fontSize: 12, marginTop: 4 ,}}>{mapInfo.summary_jp}</div>
-          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>
-            {linkTypes.length}種類のリンク
-          </div>
+          <div style={{ fontSize: 12, marginTop: 4 }}>{mapInfo.summary_jp}</div>
+          <div style={{ fontSize: 12, color: '#6b7280', marginTop: 4 }}>{linkTypes.length}種類のリンク</div>
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6, marginRight: 8 }}>
             {linkTypes.map(({ name_ja, color }) => (
               <span key={name_ja} style={{ display: 'flex', alignItems: 'center', gap: 3, fontSize: 12 }}>
-                <span style={{
-                  display: 'inline-block', width: 24, height: 3,
-                  background: color, borderRadius: 2,
-                }} />
+                <span
+                  style={{
+                    display: 'inline-block',
+                    width: 24,
+                    height: 3,
+                    background: color,
+                    borderRadius: 2,
+                  }}
+                />
                 {name_ja}
               </span>
             ))}

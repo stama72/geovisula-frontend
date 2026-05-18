@@ -1,27 +1,28 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { api } from './api'
 import { APP_HEADER_HEIGHT } from './layoutConstants'
 import type { MapRecord } from './types'
 
 type Props = {
-  map: MapRecord
   onClose: () => void
-  onSaved: (map: MapRecord) => void
+  onCreated: (map: MapRecord) => void
 }
 
 const panelStyle: React.CSSProperties = {
   position: 'fixed',
-  top: APP_HEADER_HEIGHT,
-  right: 0,
-  width: 440,
-  height: `calc(100vh - ${APP_HEADER_HEIGHT}px)`,
+  top: APP_HEADER_HEIGHT + 12 ,
+  left: '50%',
+  transform: 'translate(-50%, 0%)',
+  width: 640,
+  maxHeight: `calc(100vh - ${APP_HEADER_HEIGHT + 40}px)`,
   background: 'rgba(255,255,255,0.98)',
-  boxShadow: '-6px 0 28px rgba(15, 23, 42, 0.18)',
-  borderLeft: '1px solid rgba(148,163,184,0.3)',
-  zIndex: 1600,
+  boxShadow: '0 10px 40px rgba(15, 23, 42, 0.18)',
+  borderRadius: 12,
+  zIndex: 2000,
   padding: 20,
   overflowY: 'auto',
 }
+
 
 const inputStyle: React.CSSProperties = {
   width: '100%',
@@ -47,44 +48,23 @@ const buttonStyle = (kind: 'primary' | 'secondary'): React.CSSProperties => ({
 const permissionOptions = ['private', 'shared', 'public'] as const
 const timeScaleOptions = ['hundred_years', 'ten_years', 'five_years', 'one_year', 'one_month', 'one_week', 'one_day'] as const
 
-function dateValue(value: string | null) {
-  return value ? value.slice(0, 10) : ''
-}
-
-export default function EditMapPanel({ map, onClose, onSaved }: Props) {
+export default function CreateMapPanel({ onClose, onCreated }: Props) {
   const [form, setForm] = useState({
-    name: map.name,
-    name_ja: map.name_ja,
-    owner_id: map.owner,
-    read_permission: map.read_permission,
-    edit_permission: map.edit_permission,
-    exist_from: dateValue(map.exist_from),
-    exist_until: dateValue(map.exist_until),
-    time_scale: map.time_scale,
-    summary: map.summary ?? '',
-    summary_jp: map.summary_jp ?? '',
-    regulations: map.regulations ?? '',
+    name: '',
+    name_ja: '',
+    read_permission: 'private',
+    edit_permission: 'private',
+    exist_from: '1900-01-01',
+    exist_until: '9999-12-31',
+    time_scale: 'one_year',
+    summary: '',
+    summary_jp: '',
+    regulations: '',
   })
   const [message, setMessage] = useState('')
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    setForm({
-      name: map.name,
-      name_ja: map.name_ja,
-      owner_id: map.owner,
-      read_permission: map.read_permission,
-      edit_permission: map.edit_permission,
-      exist_from: dateValue(map.exist_from),
-      exist_until: dateValue(map.exist_until),
-      time_scale: map.time_scale,
-      summary: map.summary ?? '',
-      summary_jp: map.summary_jp ?? '',
-      regulations: map.regulations ?? '',
-    })
-  }, [map])
-
-  async function handleSave() {
+  async function handleCreate() {
     setMessage('')
     if (!form.name.trim() || !form.name_ja.trim()) {
       setMessage('マップ名を入力してください')
@@ -106,17 +86,23 @@ export default function EditMapPanel({ map, onClose, onSaved }: Props) {
       setMessage('終了時点は9999-12-31以前である必要があります')
       return
     }
-
     setSaving(true)
     try {
-      const updated = await api.updateMap(map.id, {
-        ...form,
+      const created = await api.createMap({
         name: form.name.trim(),
         name_ja: form.name_ja.trim(),
+        read_permission: form.read_permission,
+        edit_permission: form.edit_permission,
+        exist_from: form.exist_from,
+        exist_until: form.exist_until,
+        time_scale: form.time_scale,
+        summary: form.summary,
+        summary_jp: form.summary_jp,
+        regulations: form.regulations,
       })
-      onSaved(updated)
+      onCreated(created)
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'マップの保存に失敗しました')
+      setMessage(error instanceof Error ? error.message : 'マップの作成に失敗しました')
     } finally {
       setSaving(false)
     }
@@ -126,8 +112,8 @@ export default function EditMapPanel({ map, onClose, onSaved }: Props) {
     <aside style={panelStyle}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
         <div>
-          <div style={{ fontSize: 12, color: '#64748b' }}>マップ編集</div>
-          <h3 style={{ margin: '4px 0 0', fontSize: 18 }}>{map.name_ja}</h3>
+          <div style={{ fontSize: 12, color: '#64748b' }}>マップ新規作成</div>
+          <h3 style={{ margin: '4px 0 0', fontSize: 18 }}>{form.name_ja || '新しいマップ'}</h3>
         </div>
         <button onClick={onClose} style={{ ...buttonStyle('secondary'), width: 40, height: 40, padding: 0 }}>
           ✕
@@ -135,12 +121,12 @@ export default function EditMapPanel({ map, onClose, onSaved }: Props) {
       </div>
 
       <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
-        マップ名
+        Map Name
         <input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} style={{ ...inputStyle, marginTop: 6 }} />
       </label>
 
       <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
-        日本語名
+        マップ名
         <input value={form.name_ja} onChange={(event) => setForm({ ...form, name_ja: event.target.value })} style={{ ...inputStyle, marginTop: 6 }} />
       </label>
 
@@ -157,6 +143,7 @@ export default function EditMapPanel({ map, onClose, onSaved }: Props) {
       <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
         tips: 終了時点をデフォルト値(9999-12-31)に設定すると、"マップ閲覧日現在まで"として設定できます。
       </label>
+
       <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
         表示スケール
         <select value={form.time_scale} onChange={(event) => setForm({ ...form, time_scale: event.target.value })} style={{ ...inputStyle, marginTop: 6 }}>
@@ -186,17 +173,17 @@ export default function EditMapPanel({ map, onClose, onSaved }: Props) {
       </div>
 
       <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
-        概要（英語）
+        Description (English)
         <textarea value={form.summary} onChange={(event) => setForm({ ...form, summary: event.target.value })} rows={4} style={{ ...inputStyle, marginTop: 6, resize: 'vertical' }} />
       </label>
 
       <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
-        概要（日本語）
+        説明（日本語）
         <textarea value={form.summary_jp} onChange={(event) => setForm({ ...form, summary_jp: event.target.value })} rows={4} style={{ ...inputStyle, marginTop: 6, resize: 'vertical' }} />
       </label>
 
       <label style={{ display: 'block', marginBottom: 16, fontSize: 13, color: '#334155' }}>
-        編集ルール、基準など
+        編集ルール/ガイドライン
         <textarea value={form.regulations} onChange={(event) => setForm({ ...form, regulations: event.target.value })} rows={4} style={{ ...inputStyle, marginTop: 6, resize: 'vertical' }} />
       </label>
 
@@ -207,8 +194,8 @@ export default function EditMapPanel({ map, onClose, onSaved }: Props) {
       )}
 
       <div style={{ display: 'flex', gap: 10 }}>
-        <button onClick={handleSave} disabled={saving} style={{ ...buttonStyle('primary'), flex: 1 }}>
-          {saving ? '保存中...' : '保存'}
+        <button onClick={handleCreate} disabled={saving} style={{ ...buttonStyle('primary'), flex: 1 }}>
+          {saving ? '作成中...' : 'マップを新規作成'}
         </button>
         <button onClick={onClose} style={{ ...buttonStyle('secondary'), flex: 1 }}>
           閉じる

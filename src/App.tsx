@@ -3,24 +3,28 @@ import './App.css'
 import { api } from './api'
 import CountryManager from './CountryManager'
 import EditMapPanel from './EditMapPanel'
+import CreateMapPanel from './CreateMapPanel'
 import LinkTypesPanel from './LinkTypesPanel'
 import LoginPage from './LoginPage'
 import MapView from './MapView'
 import LinkEditorPanel from './LinkEditorPanel'
 import { APP_HEADER_HEIGHT } from './layoutConstants'
-import type { Country, CountryCoordinates, CountryEditorEntry, LinkType, MapRecord } from './types'
+import type { Country, CountryEditorEntry, LinkType, MapRecord } from './types'
 
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem('token') ?? '')
   const [displayName, setDisplayName] = useState(localStorage.getItem('displayName') ?? '')
   const [role, setRole] = useState(localStorage.getItem('role') ?? '')
   const [maps, setMaps] = useState<MapRecord[]>([])
-  const [selectedMapId, setSelectedMapId] = useState<number | null>(Number(localStorage.getItem('selectedMapId') ?? '1') || null)
+  const [selectedMapId, setSelectedMapId] = useState<number | null>(() => {
+    const v = localStorage.getItem('selectedMapId')
+    return v ? Number(v) : null
+  })
   const [countries, setCountries] = useState<CountryEditorEntry[]>([])
   const [linkTypes, setLinkTypes] = useState<LinkType[]>([])
-  const [showCountryManager, setShowCountryManager] = useState(false)
-  const [showMapEditor, setShowMapEditor] = useState(false)
-  const [showLinkTypeEditor, setShowLinkTypeEditor] = useState(false)
+  const [refreshLinkTypeId, setRefreshLinkTypeId] = useState<number | null>(null)
+  const [showCreateMapPanel, setShowCreateMapPanel] = useState(false)
+  const [activePanel, setActivePanel] = useState<'mapEditor' | 'linkTypes' | 'countryManager' | null>(null)
   const [loadingError, setLoadingError] = useState('')
   const [mapEditable, setMapEditable] = useState(false)
   const [editMode, setEditMode] = useState(false)
@@ -43,18 +47,14 @@ export default function App() {
     async function loadInitialData() {
       try {
         const [mapRows, countryRows] = await Promise.all([api.getMaps(), api.getCountries()])
-        const countriesWithCoordinates = await Promise.all(
-          countryRows.map(async (country) => {
-            const coordinates: CountryCoordinates = await api.getCountryCoordinates(country.iso_id)
-            return {
-              id: country.iso_id,
-              name_ja: country.name_ja,
-              capital_point_id: country.capital_point_id,
-              lat: coordinates.lat,
-              lng: coordinates.lng,
-            }
-          }),
-        )
+        const coordMap = await api.getCountriesCoordinates()
+        const countriesWithCoordinates = countryRows.map((country) => ({
+          id: country.iso_id,
+          name_ja: country.name_ja,
+          capital_point_id: country.capital_point_id,
+          lat: coordMap[country.iso_id]?.lat ?? 0,
+          lng: coordMap[country.iso_id]?.lng ?? 0,
+        }))
 
         if (cancelled) {
           return
@@ -156,10 +156,12 @@ export default function App() {
 
   async function handleLinkCreate(payload: { fromCountryId: string; toCountryId: string; fromCoords: [number, number]; toCoords: [number, number] }) {
     console.log('handleLinkCreate:', payload)
+    // When starting a link edit, close any open side panels
+    setActivePanel(null)
     setLinkDraft(payload)
   }
 
-  async function handleLinkSave(form: { linkTypeId: number; existFrom: string; existUntil: string }) {
+  async function handleLinkSave(form: { linkTypeId: number; existFrom: string; existUntil: string }): Promise<void> {
     if (!selectedMapId || !linkDraft) {
       return
     }
@@ -180,7 +182,8 @@ export default function App() {
       exist_from: form.existFrom,
       exist_until: form.existUntil,
     })
-    
+    // trigger MapView to refresh links for the updated link type (partial refresh)
+    setRefreshLinkTypeId(form.linkTypeId)
     // Do not clear `linkDraft` here. Clearing is handled by LinkEditorPanel via `onClose`
     // after a successful save, so the draft remains visible until the panel closes.
   }
@@ -193,29 +196,32 @@ export default function App() {
     setMaps([])
     setCountries([])
     setSelectedMapId(null)
-    setShowCountryManager(false)
-    setShowMapEditor(false)
-    setShowLinkTypeEditor(false)
+    setActivePanel(null)
+    setShowCreateMapPanel(false)
     setLoadingError('')
   }
 
   async function refreshCountries() {
     const countryRows: Country[] = await api.getCountries()
-    const countriesWithCoordinates = await Promise.all(
-      countryRows.map(async (country) => {
-        const coordinates = await api.getCountryCoordinates(country.iso_id)
-        return {
-          id: country.iso_id,
-          name_ja: country.name_ja,
-          capital_point_id: country.capital_point_id,
-          lat: coordinates.lat,
-          lng: coordinates.lng,
-        }
-      }),
-    )
+    const coordMap = await api.getCountriesCoordinates()
+    const countriesWithCoordinates = countryRows.map((country) => ({
+      id: country.iso_id,
+      name_ja: country.name_ja,
+      capital_point_id: country.capital_point_id,
+      lat: coordMap[country.iso_id]?.lat ?? 0,
+      lng: coordMap[country.iso_id]?.lng ?? 0,
+    }))
 
     setCountries(countriesWithCoordinates)
   }
+
+  useEffect(() => {
+    if (selectedMapId != null) {
+      localStorage.setItem('selectedMapId', String(selectedMapId))
+    } else {
+      localStorage.removeItem('selectedMapId')
+    }
+  }, [selectedMapId])
 
   if (!token) {
     return <LoginPage onLogin={handleLogin} />
@@ -245,7 +251,14 @@ export default function App() {
           マップ
           <select
             value={selectedMapId ?? ''}
-            onChange={(event) => setSelectedMapId(event.target.value ? Number(event.target.value) : null)}
+            onChange={(event) => {
+              const v = event.target.value
+              if (v === '__create_new') {
+                setShowCreateMapPanel(true)
+                return
+              }
+              setSelectedMapId(v ? Number(v) : null)
+            }}
             style={{
               minWidth: 220,
               padding: '7px 10px',
@@ -256,6 +269,7 @@ export default function App() {
             }}
           >
             {maps.length === 0 && <option value="">読み込み中...</option>}
+            <option value="__create_new">(マップを新規作成...)</option>
             {maps.map((map) => (
               <option key={map.id} value={map.id}>
                 {map.name_ja}
@@ -277,7 +291,7 @@ export default function App() {
         {mapEditable && (
           <>
             <button
-              onClick={() => setShowMapEditor(true)}
+              onClick={() => setActivePanel(activePanel === 'mapEditor' ? null : 'mapEditor')}
               style={{
                 padding: '7px 12px',
                 borderRadius: 8,
@@ -292,7 +306,7 @@ export default function App() {
             </button>
 
             <button
-              onClick={() => setShowLinkTypeEditor(true)}
+              onClick={() => setActivePanel(activePanel === 'linkTypes' ? null : 'linkTypes')}
               style={{
                 padding: '7px 12px',
                 borderRadius: 8,
@@ -327,7 +341,7 @@ export default function App() {
         )}
 
         <button
-          onClick={() => setShowCountryManager(true)}
+          onClick={() => setActivePanel(activePanel === 'countryManager' ? null : 'countryManager')}
           style={{
             padding: '7px 12px',
             borderRadius: 8,
@@ -362,7 +376,17 @@ export default function App() {
       </div>
 
       <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
-        <MapView mapId={selectedMapId} editMode={editMode} onLinkCreate={handleLinkCreate} activeDraft={linkDraft} />
+        <MapView
+          mapId={selectedMapId}
+          editMode={editMode}
+          onLinkCreate={handleLinkCreate}
+          activeDraft={linkDraft}
+          refreshLinkTypeId={refreshLinkTypeId}
+          onLinksRefreshed={() => {
+            // clear the trigger once MapView handled the partial refresh
+            setRefreshLinkTypeId(null)
+          }}
+        />
       </div>
 
       {linkDraft && selectedMap && (
@@ -380,33 +404,44 @@ export default function App() {
       {/* debug: log linkDraft changes */}
       <DebugLogger linkDraft={linkDraft} />
 
-      {showMapEditor && selectedMap && (
+      {activePanel === 'mapEditor' && selectedMap && (
         <EditMapPanel
           map={selectedMap}
-          onClose={() => setShowMapEditor(false)}
+          onClose={() => setActivePanel(null)}
           onSaved={(updatedMap) => {
             setMaps((currentMaps) => currentMaps.map((map) => (map.id === updatedMap.id ? updatedMap : map)))
-            setShowMapEditor(false)
+            setActivePanel(null)
           }}
         />
       )}
 
-      {showLinkTypeEditor && selectedMap && (
+      {showCreateMapPanel && (
+        <CreateMapPanel
+          onClose={() => setShowCreateMapPanel(false)}
+          onCreated={(map) => {
+            setMaps((current) => [...current, map])
+            setSelectedMapId(map.id)
+            setShowCreateMapPanel(false)
+          }}
+        />
+      )}
+
+      {activePanel === 'linkTypes' && selectedMap && (
         <LinkTypesPanel
           mapId={selectedMap.id}
           linkTypes={linkTypes}
-          onClose={() => setShowLinkTypeEditor(false)}
+          onClose={() => setActivePanel(null)}
           onRefresh={async () => {
             setLinkTypes(await api.getLinkTypes(selectedMap.id))
           }}
         />
       )}
 
-      {showCountryManager && (
+      {activePanel === 'countryManager' && (
         <CountryManager
           role={role}
           countries={countries}
-          onClose={() => setShowCountryManager(false)}
+          onClose={() => setActivePanel(null)}
           onUpdate={() => {
             void refreshCountries()
           }}

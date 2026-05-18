@@ -17,7 +17,7 @@ type Draft = {
   animated: boolean
 }
 
-const palette = ['#2563eb', '#0ea5e9', '#14b8a6', '#22c55e', '#eab308', '#f97316', '#ef4444', '#8b5cf6']
+const palette = ['#2563eb', '#0ea5e9', '#14b8a6', '#22c55e', '#eab308', '#f97316', '#ef4444', '#8b5cf6', '#808080', '#ffffff']
 
 const panelStyle: React.CSSProperties = {
   position: 'fixed',
@@ -162,6 +162,13 @@ export default function LinkTypesPanel({ mapId, linkTypes, onClose, onRefresh }:
               }}
             />
           ))}
+          <input
+            type="color"
+            value={draft.color}
+            onChange={(e) => setDraft({ ...draft, color: e.target.value })}
+            title="カスタムカラー"
+            style={{ width: 36, height: 36, border: 'none', padding: 0, background: 'transparent', cursor: 'pointer' }}
+          />
         </div>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, fontSize: 13, color: '#334155' }}>
           <input type="checkbox" checked={draft.animated} onChange={(event) => setDraft({ ...draft, animated: event.target.checked })} />
@@ -216,6 +223,13 @@ export default function LinkTypesPanel({ mapId, linkTypes, onClose, onRefresh }:
                   }}
                 />
               ))}
+              <input
+                type="color"
+                value={type.color || '#000000'}
+                onChange={(e) => setEditingTypes((current) => current.map((item) => (item.id === type.id ? { ...item, color: e.target.value } : item)))}
+                title="カスタムカラー"
+                style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e2e8f0', padding: 0, cursor: 'pointer' }}
+              />
             </div>
 
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 13, color: '#334155' }}>

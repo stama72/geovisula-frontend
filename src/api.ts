@@ -74,6 +74,10 @@ export const api = {
     return requestJson<CountryCoordinates>(`${BASE}/api/countries/${countryId}/coordinates`)
   },
 
+  async getCountriesCoordinates() {
+    return requestJson<Record<string, { lat: number; lng: number }>>(`${BASE}/api/countries/coordinates`)
+  },
+
   async addCountry(data: {
     id: string
     name: string
@@ -165,6 +169,45 @@ export const api = {
         exist_from: data.exist_from,
         exist_until: data.exist_until,
       }),
+    })
+  },
+
+  async createMap(data: {
+    name: string
+    name_ja: string
+    read_permission: string
+    edit_permission: string
+    exist_from: string
+    exist_until: string
+    time_scale: string
+    summary?: string
+    summary_jp?: string
+    regulations?: string
+  }) {
+    // try to infer owner id from token payload (JWT 'sub') if available
+    function parseJwtPayload() {
+      const token = getToken()
+      if (!token) return null
+      try {
+        const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+        const json = decodeURIComponent(
+          Array.prototype.map
+            .call(atob(base64), (c: string) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+            .join(''),
+        )
+        return JSON.parse(json)
+      } catch {
+        return null
+      }
+    }
+
+    const payload = parseJwtPayload()
+    const owner_id = payload && payload.sub ? Number(payload.sub) : undefined
+
+    return requestJson<MapRecord>(`${BASE}/api/maps`, {
+      method: 'POST',
+      headers: buildHeaders(true),
+      body: JSON.stringify({ ...(data as any), owner_id }),
     })
   },
 
