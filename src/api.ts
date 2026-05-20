@@ -8,7 +8,7 @@ import type {
   RelationLink,
 } from './types'
 
-const BASE = 'http://localhost:8000'
+const BASE = ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000').replace(/\/+$/, '')
 
 function getToken() {
   return localStorage.getItem('token')
