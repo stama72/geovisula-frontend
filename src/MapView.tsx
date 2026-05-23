@@ -22,6 +22,7 @@ type Props = {
     existUntil: string | null
   }) => void
   activeDraft?: { fromCountryId: string; toCountryId: string; fromCoords: [number, number]; toCoords: [number, number] } | null
+  mapDataRefreshKey?: number
   refreshLinkTypeId?: number | null
   onLinksRefreshed?: (linkTypeId: number) => void
 }
@@ -78,7 +79,7 @@ function formatDateLabel(value: string | null) {
   return value ? value.slice(0, 10) : 'なし'
 }
 
-export default function MapView({ mapId, editMode = false, onLinkCreate, onLinkEdit, activeDraft, refreshLinkTypeId, onLinksRefreshed }: Props) {
+export default function MapView({ mapId, editMode = false, onLinkCreate, onLinkEdit, activeDraft, mapDataRefreshKey, refreshLinkTypeId, onLinksRefreshed }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<mapboxgl.Map | null>(null)
   const [mapInfo, setMapInfo] = useState<MapRecord | null>(null)
@@ -446,7 +447,7 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, onLinkE
     return () => {
       cancelled = true
     }
-  }, [mapId, mapReady])
+  }, [mapId, mapReady, mapDataRefreshKey])
 
   useEffect(() => {
     if (!mapRef.current || mapId === null || refreshLinkTypeId == null) return

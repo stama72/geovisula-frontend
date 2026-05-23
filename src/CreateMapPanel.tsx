@@ -145,7 +145,7 @@ export default function CreateMapPanel({ onClose, onCreated }: Props) {
       </label>
 
       <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
-        表示スケール
+        表示スケール(準備中)
         <select value={form.time_scale} onChange={(event) => setForm({ ...form, time_scale: event.target.value })} style={{ ...inputStyle, marginTop: 6 }}>
           {timeScaleOptions.map((option) => (
             <option key={option} value={option}>{option}</option>
@@ -155,7 +155,7 @@ export default function CreateMapPanel({ onClose, onCreated }: Props) {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
-          閲覧権限
+          閲覧
           <select value={form.read_permission} onChange={(event) => setForm({ ...form, read_permission: event.target.value })} style={{ ...inputStyle, marginTop: 6 }}>
             {permissionOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
@@ -163,7 +163,7 @@ export default function CreateMapPanel({ onClose, onCreated }: Props) {
           </select>
         </label>
         <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
-          編集権限
+          編集
           <select value={form.edit_permission} onChange={(event) => setForm({ ...form, edit_permission: event.target.value })} style={{ ...inputStyle, marginTop: 6 }}>
             {permissionOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
@@ -171,10 +171,10 @@ export default function CreateMapPanel({ onClose, onCreated }: Props) {
           </select>
         </label>
       </div>
-
       <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
-        Description (English)
-        <textarea value={form.summary} onChange={(event) => setForm({ ...form, summary: event.target.value })} rows={4} style={{ ...inputStyle, marginTop: 6, resize: 'vertical' }} />
+          private：自分だけが閲覧/編集できます。
+          public：全員が閲覧/編集できます。
+          shared：(準備中)
       </label>
 
       <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
@@ -182,9 +182,17 @@ export default function CreateMapPanel({ onClose, onCreated }: Props) {
         <textarea value={form.summary_jp} onChange={(event) => setForm({ ...form, summary_jp: event.target.value })} rows={4} style={{ ...inputStyle, marginTop: 6, resize: 'vertical' }} />
       </label>
 
+      <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
+        Description (English) (optional)
+        <textarea value={form.summary} onChange={(event) => setForm({ ...form, summary: event.target.value })} rows={4} style={{ ...inputStyle, marginTop: 6, resize: 'vertical' }} />
+      </label>
+
       <label style={{ display: 'block', marginBottom: 16, fontSize: 13, color: '#334155' }}>
-        編集ルール/ガイドライン
+        共同編集ルール/ガイド (optional)
         <textarea value={form.regulations} onChange={(event) => setForm({ ...form, regulations: event.target.value })} rows={4} style={{ ...inputStyle, marginTop: 6, resize: 'vertical' }} />
+      </label>
+      <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
+          tips: 共同編集のためのルールや参考情報を記載する欄です。例：「外務省の国・地域のページに基づいた内容にしてください」「リンクタイプOOには～、XXは～を入れてください」「wikipediaのこのページが参考になります」など。
       </label>
 
       {message && (

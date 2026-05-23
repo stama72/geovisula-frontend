@@ -61,7 +61,9 @@ function createEmptyDraft(): Draft {
 export default function LinkTypesPanel({ mapId, linkTypes, onClose, onRefresh }: Props) {
   const [draft, setDraft] = useState<Draft>(createEmptyDraft())
   const [message, setMessage] = useState('')
+  const [messageTone, setMessageTone] = useState<'error' | 'success'>('error')
   const [saving, setSaving] = useState(false)
+  const [savingTypeId, setSavingTypeId] = useState<number | null>(null)
   const [editingTypes, setEditingTypes] = useState<LinkType[]>(linkTypes)
 
   useEffect(() => {
@@ -71,6 +73,7 @@ export default function LinkTypesPanel({ mapId, linkTypes, onClose, onRefresh }:
   async function handleCreate() {
     setMessage('')
     if (!draft.name.trim() || !draft.name_ja.trim()) {
+      setMessageTone('error')
       setMessage('名前を入力してください')
       return
     }
@@ -87,6 +90,7 @@ export default function LinkTypesPanel({ mapId, linkTypes, onClose, onRefresh }:
       setDraft(createEmptyDraft())
       await onRefresh()
     } catch (error) {
+      setMessageTone('error')
       setMessage(error instanceof Error ? error.message : 'リンクタイプの作成に失敗しました')
     } finally {
       setSaving(false)
@@ -95,6 +99,7 @@ export default function LinkTypesPanel({ mapId, linkTypes, onClose, onRefresh }:
 
   async function handleUpdate(type: LinkType) {
     setMessage('')
+    setSavingTypeId(type.id)
     try {
       await api.updateLinkType(type.id, {
         name: type.name,
@@ -104,8 +109,13 @@ export default function LinkTypesPanel({ mapId, linkTypes, onClose, onRefresh }:
         animated: type.animated,
       })
       await onRefresh()
+      setMessageTone('success')
+      setMessage('更新しました。マップ情報とリンクを再読み込みしました。')
     } catch (error) {
+      setMessageTone('error')
       setMessage(error instanceof Error ? error.message : 'リンクタイプの更新に失敗しました')
+    } finally {
+      setSavingTypeId(null)
     }
   }
 
@@ -118,6 +128,7 @@ export default function LinkTypesPanel({ mapId, linkTypes, onClose, onRefresh }:
       await api.deleteLinkType(type.id, mapId)
       await onRefresh()
     } catch (error) {
+      setMessageTone('error')
       setMessage(error instanceof Error ? error.message : 'リンクタイプの削除に失敗しました')
     }
   }
@@ -172,7 +183,7 @@ export default function LinkTypesPanel({ mapId, linkTypes, onClose, onRefresh }:
         </div>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, fontSize: 13, color: '#334155' }}>
           <input type="checkbox" checked={draft.animated} onChange={(event) => setDraft({ ...draft, animated: event.target.checked })} />
-          アニメーションを有効にする
+          アニメーションを有効にする(準備中)
         </label>
         <button disabled={saving} onClick={handleCreate} style={{ ...buttonStyle('primary'), width: '100%' }}>
           {saving ? '作成中...' : '新規作成'}
@@ -238,12 +249,12 @@ export default function LinkTypesPanel({ mapId, linkTypes, onClose, onRefresh }:
                 checked={type.animated}
                 onChange={(event) => setEditingTypes((current) => current.map((item) => (item.id === type.id ? { ...item, animated: event.target.checked } : item)))}
               />
-              アニメーションを有効にする
+              アニメーションを有効にする(準備中)
             </label>
 
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => handleUpdate(type)} style={{ ...buttonStyle('primary'), flex: 1 }}>
-                保存
+              <button onClick={() => handleUpdate(type)} disabled={savingTypeId === type.id} style={{ ...buttonStyle('primary'), flex: 1 }}>
+                {savingTypeId === type.id ? '保存中...' : '保存'}
               </button>
               <button onClick={() => handleDelete(type)} style={{ ...buttonStyle('danger'), flex: 1 }}>
                 削除
@@ -259,7 +270,16 @@ export default function LinkTypesPanel({ mapId, linkTypes, onClose, onRefresh }:
       </div>
 
       {message && (
-        <div style={{ marginTop: 14, padding: '10px 12px', borderRadius: 8, background: '#fef2f2', color: '#b91c1c', fontSize: 13 }}>
+        <div
+          style={{
+            marginTop: 14,
+            padding: '10px 12px',
+            borderRadius: 8,
+            background: messageTone === 'success' ? '#f0fdf4' : '#fef2f2',
+            color: messageTone === 'success' ? '#166534' : '#b91c1c',
+            fontSize: 13,
+          }}
+        >
           {message}
         </div>
       )}

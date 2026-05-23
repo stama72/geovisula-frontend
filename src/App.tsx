@@ -35,6 +35,10 @@ function normalizeDateForInput(value: string | null, fallback: string) {
   return value ? value.slice(0, 10) : fallback
 }
 
+function getMapEditableCacheKey(mapId: number) {
+  return `mapEditable:${mapId}`
+}
+
 export default function App() {
   const [token, setToken] = useState(localStorage.getItem('token') ?? '')
   const [displayName, setDisplayName] = useState(localStorage.getItem('displayName') ?? '')
@@ -47,11 +51,26 @@ export default function App() {
   const [countries, setCountries] = useState<CountryEditorEntry[]>([])
   const [linkTypes, setLinkTypes] = useState<LinkType[]>([])
   const [refreshLinkTypeId, setRefreshLinkTypeId] = useState<number | null>(null)
+  const [mapDataRefreshKey, setMapDataRefreshKey] = useState(0)
   const [showCreateMapPanel, setShowCreateMapPanel] = useState(false)
   const [activePanel, setActivePanel] = useState<'mapEditor' | 'linkTypes' | 'countryManager' | null>(null)
   const [loadingError, setLoadingError] = useState('')
-  const [mapEditable, setMapEditable] = useState(false)
-  const [editMode, setEditMode] = useState(false)
+  const [mapEditable, setMapEditable] = useState(() => {
+    const storedMapId = localStorage.getItem('selectedMapId')
+    if (!storedMapId) {
+      return false
+    }
+
+    return localStorage.getItem(getMapEditableCacheKey(Number(storedMapId))) === 'true'
+  })
+  const [editMode, setEditMode] = useState(() => {
+    const storedMapId = localStorage.getItem('selectedMapId')
+    if (!storedMapId) {
+      return false
+    }
+
+    return localStorage.getItem(getMapEditableCacheKey(Number(storedMapId))) === 'true'
+  })
   const [linkDraft, setLinkDraft] = useState<LinkDraft | null>(null)
 
   const selectedMap = maps.find((map) => map.id === selectedMapId) ?? null
@@ -105,18 +124,29 @@ export default function App() {
 
   useEffect(() => {
     if (!token || !selectedMapId) {
-      setMapEditable(false)
-      setEditMode(false)
+      queueMicrotask(() => {
+        setMapEditable(false)
+        setEditMode(false)
+      })
       return
     }
 
     let cancelled = false
     const mapId = selectedMapId
+    const cacheKey = getMapEditableCacheKey(mapId)
+    const cachedEditable = localStorage.getItem(cacheKey)
+
+    if (cachedEditable !== null) {
+      const editable = cachedEditable === 'true'
+      setMapEditable(editable)
+      setEditMode(editable)
+    }
 
     async function loadEditableState() {
       try {
         const { editable } = await api.isMapEditable(mapId)
         if (!cancelled) {
+          localStorage.setItem(cacheKey, String(editable))
           setMapEditable(editable)
           setEditMode(editable)
         }
@@ -137,7 +167,9 @@ export default function App() {
 
   useEffect(() => {
     if (!selectedMapId) {
-      setLinkTypes([])
+      queueMicrotask(() => {
+        setLinkTypes([])
+      })
       return
     }
 
@@ -398,7 +430,7 @@ export default function App() {
               fontWeight: editMode ? 700 : 400,
             }}
           >
-            {editMode ? '編集中' : '編集'}
+            {editMode ? 'リンクを編集中' : 'リンクを編集する'}
           </button>
         )}
 
@@ -444,6 +476,7 @@ export default function App() {
           onLinkCreate={handleLinkCreate}
           onLinkEdit={handleLinkEdit}
           activeDraft={linkDraft?.mode === 'create' ? linkDraft : null}
+          mapDataRefreshKey={mapDataRefreshKey}
           refreshLinkTypeId={refreshLinkTypeId}
           onLinksRefreshed={() => {
             // clear the trigger once MapView handled the partial refresh
@@ -496,7 +529,9 @@ export default function App() {
           linkTypes={linkTypes}
           onClose={() => setActivePanel(null)}
           onRefresh={async () => {
-            setLinkTypes(await api.getLinkTypes(selectedMap.id))
+            const refreshedLinkTypes = await api.getLinkTypes(selectedMap.id)
+            setLinkTypes(refreshedLinkTypes)
+            setMapDataRefreshKey((current) => current + 1)
           }}
         />
       )}
@@ -515,7 +550,7 @@ export default function App() {
   )
 }
 
-function DebugLogger({ linkDraft }: { linkDraft: any }) {
+function DebugLogger({ linkDraft }: { linkDraft: LinkDraft | null }) {
   useEffect(() => {
     console.log('DebugLogger: linkDraft changed ->', linkDraft)
   }, [linkDraft])
