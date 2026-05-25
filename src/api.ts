@@ -141,11 +141,15 @@ export const api = {
   },
 
   async getMaps() {
-    return requestJson<MapRecord[]>(`${BASE}/api/maps`)
+    return requestJson<MapRecord[]>(`${BASE}/api/maps`,{
+      headers: buildHeaders(),
+     })
   },
 
   async getMap(mapId: number) {
-    return requestJson<MapRecord>(`${BASE}/api/maps/${mapId}`)
+    return requestJson<MapRecord>(`${BASE}/api/maps/${mapId}`,{
+      headers: buildHeaders(),
+     })
   },
 
   async updateMap(mapId: number, data: {

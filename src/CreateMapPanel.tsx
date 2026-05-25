@@ -173,7 +173,7 @@ export default function CreateMapPanel({ onClose, onCreated }: Props) {
       </div>
       <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
           private：自分だけが閲覧/編集できます。
-          public：全員が閲覧/編集できます。
+          public：誰でも閲覧/編集できます。
           shared：(準備中)
       </label>
 
@@ -188,11 +188,8 @@ export default function CreateMapPanel({ onClose, onCreated }: Props) {
       </label>
 
       <label style={{ display: 'block', marginBottom: 16, fontSize: 13, color: '#334155' }}>
-        共同編集ルール/ガイド (optional)
+        編集ルール・ソースなど (optional)
         <textarea value={form.regulations} onChange={(event) => setForm({ ...form, regulations: event.target.value })} rows={4} style={{ ...inputStyle, marginTop: 6, resize: 'vertical' }} />
-      </label>
-      <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
-          tips: 共同編集のためのルールや参考情報を記載する欄です。例：「外務省の国・地域のページに基づいた内容にしてください」「リンクタイプOOには～、XXは～を入れてください」「wikipediaのこのページが参考になります」など。
       </label>
 
       {message && (

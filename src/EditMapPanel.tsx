@@ -158,7 +158,7 @@ export default function EditMapPanel({ map, onClose, onSaved }: Props) {
         tips: 終了時点をデフォルト値(9999-12-31)に設定すると、"マップ閲覧日現在まで"として設定できます。
       </label>
       <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
-        表示スケール
+        表示スケール(準備中)
         <select value={form.time_scale} onChange={(event) => setForm({ ...form, time_scale: event.target.value })} style={{ ...inputStyle, marginTop: 6 }}>
           {timeScaleOptions.map((option) => (
             <option key={option} value={option}>{option}</option>
@@ -168,7 +168,7 @@ export default function EditMapPanel({ map, onClose, onSaved }: Props) {
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
         <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
-          閲覧権限
+          閲覧
           <select value={form.read_permission} onChange={(event) => setForm({ ...form, read_permission: event.target.value })} style={{ ...inputStyle, marginTop: 6 }}>
             {permissionOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
@@ -176,7 +176,7 @@ export default function EditMapPanel({ map, onClose, onSaved }: Props) {
           </select>
         </label>
         <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
-          編集権限
+          編集
           <select value={form.edit_permission} onChange={(event) => setForm({ ...form, edit_permission: event.target.value })} style={{ ...inputStyle, marginTop: 6 }}>
             {permissionOptions.map((option) => (
               <option key={option} value={option}>{option}</option>
@@ -184,6 +184,11 @@ export default function EditMapPanel({ map, onClose, onSaved }: Props) {
           </select>
         </label>
       </div>
+      <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
+          private：自分だけが閲覧/編集できます。
+          public：誰でも閲覧/編集できます。
+          shared：(準備中)
+      </label>
 
       <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
         概要（英語）
@@ -196,7 +201,7 @@ export default function EditMapPanel({ map, onClose, onSaved }: Props) {
       </label>
 
       <label style={{ display: 'block', marginBottom: 16, fontSize: 13, color: '#334155' }}>
-        編集ルール、基準など
+        編集ルール・ソースなど
         <textarea value={form.regulations} onChange={(event) => setForm({ ...form, regulations: event.target.value })} rows={4} style={{ ...inputStyle, marginTop: 6, resize: 'vertical' }} />
       </label>
 

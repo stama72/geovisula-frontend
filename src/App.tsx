@@ -10,6 +10,7 @@ import MapView from './MapView'
 import LinkEditorPanel from './LinkEditorPanel'
 import { APP_HEADER_HEIGHT } from './layoutConstants'
 import type { Country, CountryEditorEntry, LinkType, MapRecord } from './types'
+import { map } from 'leaflet'
 
 type LinkCreateDraft = {
   mode: 'create'
@@ -84,7 +85,7 @@ export default function App() {
 
     async function loadInitialData() {
       try {
-        const [mapRows, countryRows] = await Promise.all([api.getMaps(), api.getCountries()])
+        const [mapRows, countryRows] = await Promise.all([(api.getMaps()), api.getCountries()])
         const coordMap = await api.getCountriesCoordinates()
         const countriesWithCoordinates = countryRows.map((country) => ({
           id: country.iso_id,
@@ -97,7 +98,6 @@ export default function App() {
         if (cancelled) {
           return
         }
-
         setMaps(mapRows)
         setCountries(countriesWithCoordinates)
         setLoadingError('')
