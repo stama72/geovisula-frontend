@@ -10,7 +10,6 @@ import MapView from './MapView'
 import LinkEditorPanel from './LinkEditorPanel'
 import { APP_HEADER_HEIGHT } from './layoutConstants'
 import type { Country, CountryEditorEntry, LinkType, MapRecord } from './types'
-import { map } from 'leaflet'
 
 type LinkCreateDraft = {
   mode: 'create'
