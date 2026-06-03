@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { APP_HEADER_HEIGHT } from './layoutConstants'
+import useViewport from './useViewport'
 import type { LinkType } from './types'
 
 type LinkCreateDraft = {
@@ -30,7 +31,7 @@ type Props = {
   onDelete?: () => Promise<void>
 }
 
-const panelStyle: React.CSSProperties = {
+const desktopPanelStyle: React.CSSProperties = {
   position: 'fixed',
   top: APP_HEADER_HEIGHT,
   right: 0,
@@ -66,6 +67,7 @@ const buttonStyle = (kind: 'primary' | 'secondary'): React.CSSProperties => ({
 })
 
 export default function LinkEditorPanel({ draft, linkTypes, onClose, onSave, onDelete }: Props) {
+  const { isMobile } = useViewport()
   useEffect(() => {
     console.log('LinkEditorPanel mounted with draft:', draft)
     return () => {
@@ -79,6 +81,25 @@ export default function LinkEditorPanel({ draft, linkTypes, onClose, onSave, onD
   const [message, setMessage] = useState('')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  const panelStyle: React.CSSProperties = isMobile
+    ? {
+        position: 'fixed',
+        top: APP_HEADER_HEIGHT,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: `calc(100vh - ${APP_HEADER_HEIGHT}px)`,
+        background: 'rgba(255,255,255,0.98)',
+        boxShadow: 'none',
+        borderRadius: 0,
+        zIndex: 1500,
+        padding: 16,
+        overflowY: 'auto',
+        boxSizing: 'border-box',
+      }
+    : desktopPanelStyle
 
   useEffect(() => {
     if (draft.mode === 'edit') {

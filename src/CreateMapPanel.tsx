@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { api } from './api'
 import { APP_HEADER_HEIGHT } from './layoutConstants'
+import useViewport from './useViewport'
 import type { MapRecord } from './types'
 
 type Props = {
@@ -8,7 +9,7 @@ type Props = {
   onCreated: (map: MapRecord) => void
 }
 
-const panelStyle: React.CSSProperties = {
+const desktopPanelStyle: React.CSSProperties = {
   position: 'fixed',
   top: APP_HEADER_HEIGHT + 12 ,
   left: '50%',
@@ -49,6 +50,7 @@ const permissionOptions = ['private', 'shared', 'public'] as const
 const timeScaleOptions = ['hundred_years', 'ten_years', 'five_years', 'one_year', 'one_month', 'one_week', 'one_day'] as const
 
 export default function CreateMapPanel({ onClose, onCreated }: Props) {
+  const { isMobile } = useViewport()
   const [form, setForm] = useState({
     name: '',
     name_ja: '',
@@ -63,6 +65,25 @@ export default function CreateMapPanel({ onClose, onCreated }: Props) {
   })
   const [message, setMessage] = useState('')
   const [saving, setSaving] = useState(false)
+
+  const panelStyle: React.CSSProperties = isMobile
+    ? {
+        position: 'fixed',
+        top: APP_HEADER_HEIGHT,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: `calc(100vh - ${APP_HEADER_HEIGHT}px)`,
+        background: 'rgba(255,255,255,0.98)',
+        boxShadow: 'none',
+        borderRadius: 0,
+        zIndex: 2000,
+        padding: 16,
+        overflowY: 'auto',
+        boxSizing: 'border-box',
+      }
+    : desktopPanelStyle
 
   async function handleCreate() {
     setMessage('')
@@ -130,7 +151,7 @@ export default function CreateMapPanel({ onClose, onCreated }: Props) {
         <input value={form.name_ja} onChange={(event) => setForm({ ...form, name_ja: event.target.value })} style={{ ...inputStyle, marginTop: 6 }} />
       </label>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
         <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
           開始時点
           <input type="date" value={form.exist_from} onChange={(event) => setForm({ ...form, exist_from: event.target.value })} style={{ ...inputStyle, marginTop: 6 }} />
@@ -153,7 +174,7 @@ export default function CreateMapPanel({ onClose, onCreated }: Props) {
         </select>
       </label>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
         <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
           閲覧
           <select value={form.read_permission} onChange={(event) => setForm({ ...form, read_permission: event.target.value })} style={{ ...inputStyle, marginTop: 6 }}>

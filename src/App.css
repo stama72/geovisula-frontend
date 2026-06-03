@@ -191,6 +191,33 @@
   left: 0;
 }
 
+@media (max-width: 768px) {
+  body {
+    overscroll-behavior-y: none;
+  }
+
+  #root {
+    position: fixed;
+  }
+
+  button,
+  select,
+  input,
+  textarea {
+    touch-action: manipulation;
+  }
+}
+
+@media (max-width: 480px) {
+  #center {
+    padding: 24px 16px 20px;
+  }
+
+  #next-steps > div {
+    padding: 20px 16px;
+  }
+}
+
 
 @keyframes fadeout {
   0% {

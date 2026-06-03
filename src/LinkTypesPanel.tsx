@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { api } from './api'
 import { APP_HEADER_HEIGHT } from './layoutConstants'
+import useViewport from './useViewport'
 import type { LinkType } from './types'
 
 type Props = {
@@ -17,15 +18,15 @@ type Draft = {
   animated: boolean
 }
 
-const palette = ['#2563eb', '#0ea5e9', '#14b8a6', '#22c55e', '#eab308', '#f97316', '#ef4444', '#8b5cf6', '#808080', '#ffffff']
+const palette = ['#2563eb', '#0ea5e9', '#14b8a6', '#22c55e', '#eab308', '#f97316', '#ef4444', '#8b5cf6', '#808080', '#000000']
 
-const panelStyle: React.CSSProperties = {
+const desktopPanelStyle: React.CSSProperties = {
   position: 'fixed',
   top: APP_HEADER_HEIGHT,
   right: 0,
   width: 460,
   height: `calc(100vh - ${APP_HEADER_HEIGHT}px)`,
-  background: 'rgba(255,255,255,0.98)',
+  background: 'rgba(255,255,255,0.95)',
   boxShadow: '-6px 0 28px rgba(15, 23, 42, 0.18)',
   borderLeft: '1px solid rgba(148,163,184,0.3)',
   zIndex: 1650,
@@ -59,12 +60,33 @@ function createEmptyDraft(): Draft {
 }
 
 export default function LinkTypesPanel({ mapId, linkTypes, onClose, onRefresh }: Props) {
+  const { isMobile } = useViewport()
   const [draft, setDraft] = useState<Draft>(createEmptyDraft())
   const [message, setMessage] = useState('')
   const [messageTone, setMessageTone] = useState<'error' | 'success'>('error')
   const [saving, setSaving] = useState(false)
   const [savingTypeId, setSavingTypeId] = useState<number | null>(null)
+  const [reordering, setReordering] = useState(false)
   const [editingTypes, setEditingTypes] = useState<LinkType[]>(linkTypes)
+
+  const panelStyle: React.CSSProperties = isMobile
+    ? {
+        position: 'fixed',
+        top: APP_HEADER_HEIGHT,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        width: '100vw',
+        height: `calc(100vh - ${APP_HEADER_HEIGHT}px)`,
+        background: 'rgba(255,255,255,0.98)',
+        boxShadow: 'none',
+        borderRadius: 0,
+        zIndex: 1650,
+        padding: 16,
+        overflowY: 'auto',
+        boxSizing: 'border-box',
+      }
+    : desktopPanelStyle
 
   useEffect(() => {
     setEditingTypes(linkTypes)
@@ -133,6 +155,44 @@ export default function LinkTypesPanel({ mapId, linkTypes, onClose, onRefresh }:
     }
   }
 
+  async function swapAndPersist(fromIndex: number, toIndex: number) {
+    if (reordering) return
+    if (fromIndex === toIndex) return
+    if (fromIndex < 0 || toIndex < 0) return
+    if (fromIndex >= editingTypes.length || toIndex >= editingTypes.length) return
+
+    const next = [...editingTypes]
+    ;[next[fromIndex], next[toIndex]] = [next[toIndex], next[fromIndex]]
+    const previous = editingTypes
+
+    setEditingTypes(next)
+    setReordering(true)
+    setMessage('')
+    try {
+      await api.reorderLinkTypes(mapId, next.map((item) => item.id))
+      await onRefresh()
+      setMessageTone('success')
+      setMessage('リンクタイプの順序を保存しました。')
+    } catch (error) {
+      setEditingTypes(previous)
+      setMessageTone('error')
+      setMessage(error instanceof Error ? error.message : 'リンクタイプ順序の保存に失敗しました')
+    } finally {
+      setReordering(false)
+    }
+  }
+
+  function moveUp(index: number) {
+    if (editingTypes.length < 2) return
+    const targetIndex = index === 0 ? editingTypes.length - 1 : index - 1
+    void swapAndPersist(index, targetIndex)
+  }
+
+  function moveDown(index: number) {
+    if (editingTypes.length < 2) return
+    const targetIndex = index === editingTypes.length - 1 ? 0 : index + 1
+    void swapAndPersist(index, targetIndex)
+  }
   return (
     <aside style={panelStyle}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 16 }}>
@@ -178,7 +238,7 @@ export default function LinkTypesPanel({ mapId, linkTypes, onClose, onRefresh }:
             value={draft.color}
             onChange={(e) => setDraft({ ...draft, color: e.target.value })}
             title="カスタムカラー"
-            style={{ width: 36, height: 36, border: 'none', padding: 0, background: 'transparent', cursor: 'pointer' }}
+            style={{ width: 30, height: 30, border: 'none', padding: 0, background: 'transparent', cursor: 'pointer' }}
           />
         </div>
         <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, fontSize: 13, color: '#334155' }}>
@@ -190,6 +250,22 @@ export default function LinkTypesPanel({ mapId, linkTypes, onClose, onRefresh }:
         </button>
       </div>
 
+      {message && messageTone === 'error' && (
+        <div
+          style={{
+            marginTop: 14,
+            marginBottom: 14,
+            padding: '10px 12px',
+            borderRadius: 8,
+            background: messageTone === 'error' ? '#fef2f2' : '#f0fdf4',
+            color: messageTone === 'error' ? '#b91c1c' : '#166534',
+            fontSize: 13,
+          }}
+        >
+          {message}
+        </div>
+      )}
+
       <div style={{ fontWeight: 700, marginBottom: 10 }}>既存のリンクタイプ</div>
       <div style={{ display: 'grid', gap: 12 }}>
         {editingTypes.map((type, index) => (
@@ -197,6 +273,24 @@ export default function LinkTypesPanel({ mapId, linkTypes, onClose, onRefresh }:
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
               <span style={{ width: 16, height: 16, borderRadius: 999, background: type.color || palette[index % palette.length], display: 'inline-block' }} />
               <strong>{type.name_ja || type.name}</strong>
+              <div style={{ display: 'flex', flexDirection: 'row', gap: 8, alignItems: 'center', marginLeft: 'auto' }}>
+                <button
+                  onClick={() => moveUp(index)}
+                  disabled={reordering || editingTypes.length < 2}
+                  title="上へ移動"
+                  style={{ ...buttonStyle('secondary'), width: 40, height: 36, padding: 0 }}
+                >
+                  ▲
+                </button>
+                <button
+                  onClick={() => moveDown(index)}
+                  disabled={reordering || editingTypes.length < 2}
+                  title="下へ移動"
+                  style={{ ...buttonStyle('secondary'), width: 40, height: 36, padding: 0 }}
+                >
+                  ▼
+                </button>
+              </div>
             </div>
 
             <label style={{ display: 'block', marginBottom: 10, fontSize: 13, color: '#334155' }}>
@@ -225,12 +319,13 @@ export default function LinkTypesPanel({ mapId, linkTypes, onClose, onRefresh }:
                   type="button"
                   onClick={() => setEditingTypes((current) => current.map((item) => (item.id === type.id ? { ...item, color } : item)))}
                   style={{
-                    width: 28,
-                    height: 28,
+                    width: 30,
+                    height: 30,
                     borderRadius: 999,
                     border: type.color === color ? '3px solid #0f172a' : '2px solid transparent',
                     background: color,
                     cursor: 'pointer',
+                    boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.8)',
                   }}
                 />
               ))}
@@ -239,7 +334,7 @@ export default function LinkTypesPanel({ mapId, linkTypes, onClose, onRefresh }:
                 value={type.color || '#000000'}
                 onChange={(e) => setEditingTypes((current) => current.map((item) => (item.id === type.id ? { ...item, color: e.target.value } : item)))}
                 title="カスタムカラー"
-                style={{ width: 28, height: 28, borderRadius: 6, border: '1px solid #e2e8f0', padding: 0, cursor: 'pointer' }}
+                style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid #e2e8f0', padding: 0, cursor: 'pointer' }}
               />
             </div>
 
@@ -251,7 +346,6 @@ export default function LinkTypesPanel({ mapId, linkTypes, onClose, onRefresh }:
               />
               アニメーションを有効にする(準備中)
             </label>
-
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => handleUpdate(type)} disabled={savingTypeId === type.id} style={{ ...buttonStyle('primary'), flex: 1 }}>
                 {savingTypeId === type.id ? '保存中...' : '保存'}
@@ -268,8 +362,7 @@ export default function LinkTypesPanel({ mapId, linkTypes, onClose, onRefresh }:
           </div>
         )}
       </div>
-
-      {message && (
+      {message && messageTone === 'success' && (
         <div
           style={{
             marginTop: 14,

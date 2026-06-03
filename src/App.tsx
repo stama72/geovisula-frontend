@@ -9,6 +9,7 @@ import LoginPage from './LoginPage'
 import MapView from './MapView'
 import LinkEditorPanel from './LinkEditorPanel'
 import { APP_HEADER_HEIGHT } from './layoutConstants'
+import useViewport from './useViewport'
 import type { Country, CountryEditorEntry, LinkType, MapRecord } from './types'
 
 type LinkCreateDraft = {
@@ -40,6 +41,7 @@ function getMapEditableCacheKey(mapId: number) {
 }
 
 export default function App() {
+  const { isMobile } = useViewport()
   const [token, setToken] = useState(localStorage.getItem('token') ?? '')
   const [displayName, setDisplayName] = useState(localStorage.getItem('displayName') ?? '')
   const [role, setRole] = useState(localStorage.getItem('role') ?? '')
@@ -54,6 +56,7 @@ export default function App() {
   const [mapDataRefreshKey, setMapDataRefreshKey] = useState(0)
   const [showCreateMapPanel, setShowCreateMapPanel] = useState(false)
   const [activePanel, setActivePanel] = useState<'mapEditor' | 'linkTypes' | 'countryManager' | null>(null)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [loadingError, setLoadingError] = useState('')
   const [mapEditable, setMapEditable] = useState(() => {
     const storedMapId = localStorage.getItem('selectedMapId')
@@ -74,6 +77,12 @@ export default function App() {
   const [linkDraft, setLinkDraft] = useState<LinkDraft | null>(null)
 
   const selectedMap = maps.find((map) => map.id === selectedMapId) ?? null
+
+  useEffect(() => {
+    if (!isMobile) {
+      setMobileMenuOpen(false)
+    }
+  }, [isMobile])
 
   useEffect(() => {
     if (!token) {
@@ -292,6 +301,7 @@ export default function App() {
     setActivePanel(null)
     setShowCreateMapPanel(false)
     setLoadingError('')
+    setMobileMenuOpen(false)
   }
 
   async function refreshCountries() {
@@ -320,27 +330,52 @@ export default function App() {
     return <LoginPage onLogin={handleLogin} />
   }
 
+  const headerStyle: React.CSSProperties = {
+    position: 'relative',
+    zIndex: 40,
+    background: 'rgba(8, 17, 31, 0.88)',
+    color: 'white',
+    minHeight: APP_HEADER_HEIGHT,
+    height: isMobile ? 'auto' : APP_HEADER_HEIGHT,
+    padding: isMobile ? '10px 12px' : '0 16px',
+    boxSizing: 'border-box',
+    display: 'flex',
+    alignItems: isMobile ? 'flex-start' : 'center',
+    gap: 12,
+    flexWrap: isMobile ? 'wrap' : 'nowrap',
+    backdropFilter: 'blur(10px)',
+    boxShadow: '0 1px 0 rgba(255,255,255,0.08)',
+  }
+
+  const headerButtonStyle: React.CSSProperties = {
+    padding: '7px 12px',
+    borderRadius: 8,
+    border: '1px solid rgba(255,255,255,0.18)',
+    background: 'rgba(15, 23, 42, 0.95)',
+    color: 'white',
+    cursor: 'pointer',
+    fontSize: 13,
+  }
+
+  const mobilePanelButtonStyle: React.CSSProperties = {
+    ...headerButtonStyle,
+    width: '100%',
+    textAlign: 'left',
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#08111f' }}>
-      <div
-        style={{
-          position: 'relative',
-          zIndex: 40,
-          background: 'rgba(8, 17, 31, 0.88)',
-          color: 'white',
-          height: APP_HEADER_HEIGHT,
-          padding: '0 16px',
-          boxSizing: 'border-box',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 12,
-          backdropFilter: 'blur(10px)',
-          boxShadow: '0 1px 0 rgba(255,255,255,0.08)',
-        }}
-      >
-        <span style={{ fontWeight: 700, fontSize: 16 }}>Geovisula</span>
+      <div style={headerStyle}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: isMobile ? '100%' : 'auto' }}>
+          <span style={{ fontWeight: 700, fontSize: 16 }}>Geovisula</span>
+          {isMobile && (
+            <button onClick={() => setMobileMenuOpen((current) => !current)} style={headerButtonStyle}>
+              {mobileMenuOpen ? 'メニューを閉じる' : 'メニュー'}
+            </button>
+          )}
+        </div>
 
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#dbe4f0' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#dbe4f0', width: isMobile ? '100%' : 'auto' }}>
           マップ
           <select
             value={selectedMapId ?? ''}
@@ -353,7 +388,8 @@ export default function App() {
               setSelectedMapId(v ? Number(v) : null)
             }}
             style={{
-              minWidth: 220,
+              minWidth: isMobile ? 'min(100%, 240px)' : 220,
+              width: isMobile ? '100%' : 'auto',
               padding: '7px 10px',
               borderRadius: 8,
               border: '1px solid rgba(255,255,255,0.18)',
@@ -371,46 +407,30 @@ export default function App() {
           </select>
         </label>
 
-        {selectedMap && (
+        {selectedMap && !isMobile && (
           <span style={{ fontSize: 12, color: '#9fb2cc' }}>
             {selectedMap.read_permission} / {selectedMap.edit_permission}
           </span>
         )}
 
-        <span style={{ flex: 1 }} />
+        <span style={{ flex: 1, display: isMobile ? 'none' : 'block' }} />
 
-        {loadingError && <span style={{ fontSize: 12, color: '#fda4af' }}>{loadingError}</span>}
+        {loadingError && !isMobile && <span style={{ fontSize: 12, color: '#fda4af' }}>{loadingError}</span>}
 
-        {mapEditable && (
+        {mapEditable && !isMobile && (
           <>
             <button
               onClick={() => setActivePanel(activePanel === 'mapEditor' ? null : 'mapEditor')}
-              style={{
-                padding: '7px 12px',
-                borderRadius: 8,
-                border: '1px solid rgba(255,255,255,0.18)',
-                background: 'rgba(15, 23, 42, 0.95)',
-                color: 'white',
-                cursor: 'pointer',
-                fontSize: 13,
-              }}
+              style={headerButtonStyle}
             >
               マップ編集
             </button>
 
             <button
               onClick={() => setActivePanel(activePanel === 'linkTypes' ? null : 'linkTypes')}
-              style={{
-                padding: '7px 12px',
-                borderRadius: 8,
-                border: '1px solid rgba(255,255,255,0.18)',
-                background: 'rgba(15, 23, 42, 0.95)',
-                color: 'white',
-                cursor: 'pointer',
-                fontSize: 13,
-              }}
+              style={headerButtonStyle}
             >
-              リンクタイプ
+              リンクタイプ編集
             </button>
           </>
         )}
@@ -419,13 +439,9 @@ export default function App() {
           <button
             onClick={() => setEditMode(!editMode)}
             style={{
-              padding: '7px 12px',
-              borderRadius: 8,
-              border: '1px solid rgba(255,255,255,0.18)',
+              ...headerButtonStyle,
               background: editMode ? 'rgba(34, 197, 94, 0.12)' : 'rgba(15, 23, 42, 0.95)',
               color: editMode ? '#86efac' : 'white',
-              cursor: 'pointer',
-              fontSize: 13,
               fontWeight: editMode ? 700 : 400,
             }}
           >
@@ -433,40 +449,80 @@ export default function App() {
           </button>
         )}
 
-        <button
-          onClick={() => setActivePanel(activePanel === 'countryManager' ? null : 'countryManager')}
-          style={{
-            padding: '7px 12px',
-            borderRadius: 8,
-            border: '1px solid rgba(255,255,255,0.18)',
-            background: 'rgba(15, 23, 42, 0.95)',
-            color: 'white',
-            cursor: 'pointer',
-            fontSize: 13,
-          }}
-        >
-          国管理
-        </button>
+        {role === 'admin' && !isMobile && (
+          <button
+            onClick={() => setActivePanel(activePanel === 'countryManager' ? null : 'countryManager')}
+            style={headerButtonStyle}
+          >
+            国管理
+          </button>
+        )}
 
-        <span style={{ fontSize: 13, color: '#dbe4f0' }}>
+        <span style={{ fontSize: 13, color: '#dbe4f0', display: isMobile ? 'none' : 'inline' }}>
           {displayName}（{role}）
         </span>
 
-        <button
-          onClick={handleLogout}
+        {!isMobile && (
+          <button onClick={handleLogout} style={headerButtonStyle}>
+            ログアウト
+          </button>
+        )}
+      </div>
+
+      {isMobile && mobileMenuOpen && (
+        <div
           style={{
-            padding: '7px 12px',
-            borderRadius: 8,
-            border: '1px solid rgba(255,255,255,0.18)',
-            background: 'rgba(15, 23, 42, 0.95)',
-            color: 'white',
-            cursor: 'pointer',
-            fontSize: 13,
+            position: 'absolute',
+            top: APP_HEADER_HEIGHT,
+            right: 12,
+            zIndex: 45,
+            width: 'min(100vw - 24px, 320px)',
+            background: 'rgba(8, 17, 31, 0.98)',
+            border: '1px solid rgba(255,255,255,0.12)',
+            borderRadius: 14,
+            padding: 12,
+            boxShadow: '0 16px 40px rgba(0,0,0,0.28)',
           }}
         >
-          ログアウト
-        </button>
-      </div>
+          <div style={{ display: 'grid', gap: 10 }}>
+            <div style={{ fontSize: 12, color: '#9fb2cc' }}>
+              {displayName}（{role}）
+            </div>
+
+            {selectedMap && (
+              <div style={{ fontSize: 12, color: '#dbe4f0' }}>
+                {selectedMap.read_permission} / {selectedMap.edit_permission}
+              </div>
+            )}
+
+            {loadingError && <div style={{ fontSize: 12, color: '#fda4af' }}>{loadingError}</div>}
+
+            {mapEditable && (
+              <>
+                <button onClick={() => { setActivePanel(activePanel === 'mapEditor' ? null : 'mapEditor'); setMobileMenuOpen(false) }} style={mobilePanelButtonStyle}>
+                  マップ編集
+                </button>
+                <button onClick={() => { setActivePanel(activePanel === 'linkTypes' ? null : 'linkTypes'); setMobileMenuOpen(false) }} style={mobilePanelButtonStyle}>
+                  リンクタイプ編集
+                </button>
+                <button onClick={() => { setEditMode(!editMode); setMobileMenuOpen(false) }} style={mobilePanelButtonStyle}>
+                  {editMode ? 'リンクを編集中' : 'リンクを編集する'}
+                </button>
+              </>
+            )}
+
+            {role === 'admin' && (
+              <button onClick={() => { setActivePanel(activePanel === 'countryManager' ? null : 'countryManager'); setMobileMenuOpen(false) }} style={mobilePanelButtonStyle}>
+                国管理
+              </button>
+            )}
+
+            <button onClick={() => { handleLogout(); setMobileMenuOpen(false) }} style={mobilePanelButtonStyle}>
+              ログアウト
+            </button>
+          </div>
+        </div>
+      )}
 
       <div style={{ position: 'relative', flex: 1, minHeight: 0 }}>
         <MapView

@@ -270,6 +270,14 @@ export const api = {
     })
   },
 
+  async reorderLinkTypes(mapId: number, orderedIds: number[]) {
+    return requestJson<{ detail: string }>(`${BASE}/api/link_types/order`, {
+      method: 'PUT',
+      headers: buildHeaders(true),
+      body: JSON.stringify({ map_id: mapId, ordered_ids: orderedIds }),
+    })
+  },
+
   async getLinks(mapId: number, linkType: number, date: string) {
     const params = new URLSearchParams({
       link_type: String(linkType),

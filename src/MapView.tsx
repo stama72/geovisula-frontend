@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
 import 'mapbox-gl/dist/mapbox-gl.css'
 import { api } from './api'
+import useViewport from './useViewport'
 import type { Country, LinkType, MapRecord, RelationLink } from './types'
 
 type EnrichedCountry = Country & {
@@ -80,6 +81,7 @@ function formatDateLabel(value: string | null) {
 }
 
 export default function MapView({ mapId, editMode = false, onLinkCreate, onLinkEdit, activeDraft, mapDataRefreshKey, refreshLinkTypeId, onLinksRefreshed }: Props) {
+  const { isMobile } = useViewport()
   const containerRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<mapboxgl.Map | null>(null)
   const [mapInfo, setMapInfo] = useState<MapRecord | null>(null)
@@ -539,7 +541,7 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, onLinkE
       )}
 
       {mapboxToken && mapId && (status || error) && (
-        <div style={{ position: 'absolute', left: 16, bottom: 40, zIndex: 30 }}>
+        <div style={{ position: 'absolute', left: isMobile ? 12 : 16, right: isMobile ? 12 : 'auto', bottom: isMobile ? 12 : 40, zIndex: 30 }}>
           <div style={statusPanelStyle(error ? '#b91c1c' : '#0f766e')}>{error || status}</div>
         </div>
       )}
@@ -594,7 +596,7 @@ const panelStyle: React.CSSProperties = {
 }
 
 const statusPanelStyle = (borderColor: string): React.CSSProperties => ({
-  maxWidth: 420,
+  maxWidth: '100%',
   background: 'rgba(255,255,255,0.95)',
   color: '#111827',
   borderRadius: 12,

@@ -41,6 +41,7 @@ export type LinkType = {
   name: string
   name_ja: string
   map_id: number
+  sort_order?: number
   color: string
   animated: boolean
 }
