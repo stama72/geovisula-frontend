@@ -267,7 +267,7 @@ export default function LinkTypesPanel({ mapId, linkTypes, onClose, onRefresh }:
       )}
 
       <div style={{ fontWeight: 700, marginBottom: 10 }}>既存のリンクタイプ</div>
-      <div style={{ display: 'grid', gap: 12 }}>
+      <div style={{ display: 'grid', gap: 12 , marginBottom: isMobile ? 48 : 10}}>
         {editingTypes.map((type, index) => (
           <div key={type.id} style={{ border: '1px solid #e2e8f0', borderRadius: 12, padding: 14, background: '#fff' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>

@@ -2,8 +2,7 @@ import { useEffect, useState } from 'react'
 import './App.css'
 import { api } from './api'
 import CountryManager from './CountryManager'
-import EditMapPanel from './EditMapPanel'
-import CreateMapPanel from './CreateMapPanel'
+import MapEditorPanel from './MapEditorPanel'
 import LinkTypesPanel from './LinkTypesPanel'
 import LoginPage from './LoginPage'
 import MapView from './MapView'
@@ -355,6 +354,7 @@ export default function App() {
     color: 'white',
     cursor: 'pointer',
     fontSize: 13,
+    marginLeft: 'auto',
   }
 
   const mobilePanelButtonStyle: React.CSSProperties = {
@@ -366,17 +366,8 @@ export default function App() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#08111f' }}>
       <div style={headerStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, width: isMobile ? '100%' : 'auto' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#dbe4f0', width: 'auto' }}>
           <span style={{ fontWeight: 700, fontSize: 16 }}>Geovisula</span>
-          {isMobile && (
-            <button onClick={() => setMobileMenuOpen((current) => !current)} style={headerButtonStyle}>
-              {mobileMenuOpen ? 'メニューを閉じる' : 'メニュー'}
-            </button>
-          )}
-        </div>
-
-        <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, color: '#dbe4f0', width: isMobile ? '100%' : 'auto' }}>
-          マップ
           <select
             value={selectedMapId ?? ''}
             onChange={(event) => {
@@ -406,6 +397,11 @@ export default function App() {
             ))}
           </select>
         </label>
+        {isMobile && (
+          <button onClick={() => setMobileMenuOpen((current) => !current)} style={headerButtonStyle}>
+            {mobileMenuOpen ? '✕' : '≡'}
+          </button>
+        )}
 
         {selectedMap && !isMobile && (
           <span style={{ fontSize: 12, color: '#9fb2cc' }}>
@@ -489,12 +485,6 @@ export default function App() {
               {displayName}（{role}）
             </div>
 
-            {selectedMap && (
-              <div style={{ fontSize: 12, color: '#dbe4f0' }}>
-                {selectedMap.read_permission} / {selectedMap.edit_permission}
-              </div>
-            )}
-
             {loadingError && <div style={{ fontSize: 12, color: '#fda4af' }}>{loadingError}</div>}
 
             {mapEditable && (
@@ -504,9 +494,6 @@ export default function App() {
                 </button>
                 <button onClick={() => { setActivePanel(activePanel === 'linkTypes' ? null : 'linkTypes'); setMobileMenuOpen(false) }} style={mobilePanelButtonStyle}>
                   リンクタイプ編集
-                </button>
-                <button onClick={() => { setEditMode(!editMode); setMobileMenuOpen(false) }} style={mobilePanelButtonStyle}>
-                  {editMode ? 'リンクを編集中' : 'リンクを編集する'}
                 </button>
               </>
             )}
@@ -557,7 +544,8 @@ export default function App() {
       <DebugLogger linkDraft={linkDraft} />
 
       {activePanel === 'mapEditor' && selectedMap && (
-        <EditMapPanel
+        <MapEditorPanel
+          mode="edit"
           map={selectedMap}
           onClose={() => setActivePanel(null)}
           onSaved={(updatedMap) => {
@@ -568,7 +556,8 @@ export default function App() {
       )}
 
       {showCreateMapPanel && (
-        <CreateMapPanel
+        <MapEditorPanel
+          mode="create"
           onClose={() => setShowCreateMapPanel(false)}
           onCreated={(map) => {
             setMaps((current) => [...current, map])

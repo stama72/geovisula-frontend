@@ -142,7 +142,7 @@ export default function CountryManager({ role, countries, onClose, onUpdate }: P
       )}
 
       {/* 国一覧 */}
-      <div style={{ fontWeight: 500, marginBottom: 10, fontSize: 14 }}>
+      <div style={{ fontWeight: 500, marginBottom: isMobile ? 48 : 10, fontSize: 14 }}>
         登録済みの国（{countries.length}件）
       </div>
       {countries.map(c => (
