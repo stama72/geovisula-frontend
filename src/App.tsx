@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
-import { api } from './api'
+import { ApiError, api } from './api'
 import CountryManager from './CountryManager'
 import MapEditorPanel from './MapEditorPanel'
 import LinkTypesPanel from './LinkTypesPanel'
@@ -30,6 +30,13 @@ type LinkEditDraft = {
 }
 
 type LinkDraft = LinkCreateDraft | LinkEditDraft
+type AuthMode = 'guest' | 'user'
+
+const AUTH_TOKEN_KEY = 'token'
+const AUTH_DISPLAY_NAME_KEY = 'displayName'
+const AUTH_ROLE_KEY = 'role'
+const AUTH_MODE_KEY = 'authMode'
+const GUEST_SESSION_KEY = 'guestSessionId'
 
 function normalizeDateForInput(value: string | null, fallback: string) {
   return value ? value.slice(0, 10) : fallback
@@ -39,11 +46,47 @@ function getMapEditableCacheKey(mapId: number) {
   return `mapEditable:${mapId}`
 }
 
+function clearMapEditableCache() {
+  const keys = Object.keys(localStorage)
+  for (const key of keys) {
+    if (key.startsWith('mapEditable:')) {
+      localStorage.removeItem(key)
+    }
+  }
+}
+
+function getOrCreateGuestSessionId() {
+  const existing = localStorage.getItem(GUEST_SESSION_KEY)
+  if (existing) {
+    return existing
+  }
+
+  const generated =
+    globalThis.crypto?.randomUUID?.() ??
+    `guest-${Date.now()}-${Math.random().toString(16).slice(2)}`
+  localStorage.setItem(GUEST_SESSION_KEY, generated)
+  return generated
+}
+
+function formatErrorMessage(error: unknown, fallback: string) {
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+
+  return fallback
+}
+
 export default function App() {
   const { isMobile } = useViewport()
-  const [token, setToken] = useState(localStorage.getItem('token') ?? '')
-  const [displayName, setDisplayName] = useState(localStorage.getItem('displayName') ?? '')
-  const [role, setRole] = useState(localStorage.getItem('role') ?? '')
+  const storedToken = localStorage.getItem(AUTH_TOKEN_KEY) ?? ''
+  const storedMode = localStorage.getItem(AUTH_MODE_KEY)
+  const [token, setToken] = useState(storedToken)
+  const [displayName, setDisplayName] = useState(localStorage.getItem(AUTH_DISPLAY_NAME_KEY) ?? '')
+  const [role, setRole] = useState(localStorage.getItem(AUTH_ROLE_KEY) ?? '')
+  const [authMode, setAuthMode] = useState<AuthMode>(storedMode === 'guest' || storedMode === 'user' ? storedMode : (storedToken ? 'user' : 'guest'))
+  const [authReady, setAuthReady] = useState(Boolean(storedToken))
+  const [showAuthPanel, setShowAuthPanel] = useState(false)
+  const [authPanelMessage, setAuthPanelMessage] = useState('')
   const [maps, setMaps] = useState<MapRecord[]>([])
   const [selectedMapId, setSelectedMapId] = useState<number | null>(() => {
     const v = localStorage.getItem('selectedMapId')
@@ -57,25 +100,99 @@ export default function App() {
   const [activePanel, setActivePanel] = useState<'mapEditor' | 'linkTypes' | 'countryManager' | null>(null)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [loadingError, setLoadingError] = useState('')
-  const [mapEditable, setMapEditable] = useState(() => {
-    const storedMapId = localStorage.getItem('selectedMapId')
-    if (!storedMapId) {
-      return false
-    }
-
-    return localStorage.getItem(getMapEditableCacheKey(Number(storedMapId))) === 'true'
-  })
-  const [editMode, setEditMode] = useState(() => {
-    const storedMapId = localStorage.getItem('selectedMapId')
-    if (!storedMapId) {
-      return false
-    }
-
-    return localStorage.getItem(getMapEditableCacheKey(Number(storedMapId))) === 'true'
-  })
+  const [mapEditable, setMapEditable] = useState(false)
+  const [editMode, setEditMode] = useState(false)
   const [linkDraft, setLinkDraft] = useState<LinkDraft | null>(null)
+  const guestBootstrapInProgress = useRef(false)
 
   const selectedMap = maps.find((map) => map.id === selectedMapId) ?? null
+  const isAuthenticated = authMode === 'user' && Boolean(token)
+  const isGuest = !isAuthenticated
+
+  function resetTransientState() {
+    setMaps([])
+    setCountries([])
+    setLinkTypes([])
+    setSelectedMapId(null)
+    setRefreshLinkTypeId(null)
+    setMapDataRefreshKey(0)
+    setShowCreateMapPanel(false)
+    setActivePanel(null)
+    setMobileMenuOpen(false)
+    setLoadingError('')
+    setMapEditable(false)
+    setEditMode(false)
+    setLinkDraft(null)
+  }
+
+  function clearStoredAuth() {
+    localStorage.removeItem(AUTH_TOKEN_KEY)
+    localStorage.removeItem(AUTH_DISPLAY_NAME_KEY)
+    localStorage.removeItem(AUTH_ROLE_KEY)
+    localStorage.removeItem(AUTH_MODE_KEY)
+    setToken('')
+    setDisplayName('')
+    setRole('')
+    setAuthMode('guest')
+  }
+
+  function persistAuthSession(payload: {
+    accessToken: string
+    displayName: string
+    role: string
+    mode: AuthMode
+    guestSessionId?: string
+  }) {
+    clearMapEditableCache()
+    setToken(payload.accessToken)
+    setDisplayName(payload.displayName)
+    setRole(payload.role)
+    setAuthMode(payload.mode)
+    setAuthReady(true)
+    setShowAuthPanel(false)
+    setAuthPanelMessage('')
+    setLoadingError('')
+    localStorage.setItem(AUTH_TOKEN_KEY, payload.accessToken)
+    localStorage.setItem(AUTH_DISPLAY_NAME_KEY, payload.displayName)
+    localStorage.setItem(AUTH_ROLE_KEY, payload.role)
+    localStorage.setItem(AUTH_MODE_KEY, payload.mode)
+    if (payload.guestSessionId) {
+      localStorage.setItem(GUEST_SESSION_KEY, payload.guestSessionId)
+    }
+  }
+
+  async function bootstrapGuestSession(message = '') {
+    if (guestBootstrapInProgress.current) {
+      return
+    }
+
+    guestBootstrapInProgress.current = true
+    setAuthReady(false)
+    setShowAuthPanel(false)
+    setAuthPanelMessage(message)
+    clearStoredAuth()
+    clearMapEditableCache()
+    resetTransientState()
+
+    try {
+      const guestSessionId = getOrCreateGuestSessionId()
+      const response = await api.guestLogin(guestSessionId)
+      persistAuthSession({
+        accessToken: response.access_token,
+        displayName: response.display_name || 'ゲスト',
+        role: response.role,
+        mode: 'guest',
+        guestSessionId: response.guestSessionId ?? guestSessionId,
+      })
+    } catch (error) {
+      setAuthReady(true)
+      setShowAuthPanel(true)
+      setAuthPanelMessage(message || 'ゲスト閲覧を開始できませんでした。ログインして続行してください。')
+      setLoadingError(formatErrorMessage(error, 'ゲスト閲覧の開始に失敗しました'))
+    } finally {
+      guestBootstrapInProgress.current = false
+    }
+  }
 
   useEffect(() => {
     if (!isMobile) {
@@ -85,6 +202,10 @@ export default function App() {
 
   useEffect(() => {
     if (!token) {
+      if (guestBootstrapInProgress.current) {
+        return
+      }
+      void bootstrapGuestSession()
       return
     }
 
@@ -92,7 +213,7 @@ export default function App() {
 
     async function loadInitialData() {
       try {
-        const [mapRows, countryRows] = await Promise.all([(api.getMaps()), api.getCountries()])
+        const [mapRows, countryRows] = await Promise.all([api.getMaps(), api.getCountries()])
         const coordMap = await api.getCountriesCoordinates()
         const countriesWithCoordinates = countryRows.map((country) => ({
           id: country.iso_id,
@@ -116,9 +237,16 @@ export default function App() {
           return mapRows[0]?.id ?? null
         })
       } catch (error) {
-        if (!cancelled) {
-          setLoadingError(error instanceof Error ? error.message : '初期データの読み込みに失敗しました')
+        if (cancelled) {
+          return
         }
+
+        if (error instanceof ApiError && error.status === 401) {
+          void bootstrapGuestSession('保存されたログイン情報が無効だったため、ゲストとして再接続しました。')
+          return
+        }
+
+        setLoadingError(formatErrorMessage(error, '初期データの読み込みに失敗しました'))
       }
     }
 
@@ -204,17 +332,34 @@ export default function App() {
   }, [selectedMapId])
 
   function handleLogin(newToken: string, name: string, userRole: string) {
+    resetTransientState()
+    clearMapEditableCache()
     setToken(newToken)
     setDisplayName(name)
     setRole(userRole)
-    localStorage.setItem('token', newToken)
-    localStorage.setItem('displayName', name)
-    localStorage.setItem('role', userRole)
+    setAuthMode('user')
+    setAuthReady(true)
+    setShowAuthPanel(false)
+    setAuthPanelMessage('')
+    localStorage.setItem(AUTH_TOKEN_KEY, newToken)
+    localStorage.setItem(AUTH_DISPLAY_NAME_KEY, name)
+    localStorage.setItem(AUTH_ROLE_KEY, userRole)
+    localStorage.setItem(AUTH_MODE_KEY, 'user')
+  }
+
+  async function handleGuestLogin() {
+    await bootstrapGuestSession()
+  }
+
+  async function handleLogout() {
+    clearStoredAuth()
+    clearMapEditableCache()
+    resetTransientState()
+    await handleGuestLogin()
   }
 
   async function handleLinkCreate(payload: { fromCountryId: string; toCountryId: string; fromCoords: [number, number]; toCoords: [number, number] }) {
     console.log('handleLinkCreate:', payload)
-    // When starting a link edit, close any open side panels
     setActivePanel(null)
     setLinkDraft({ mode: 'create', ...payload })
   }
@@ -274,10 +419,7 @@ export default function App() {
       exist_until: form.existUntil,
     })
 
-    // Refresh old type first so the moved/updated line is removed from its previous bucket.
     setRefreshLinkTypeId(linkDraft.linkTypeId)
-    // Do not clear `linkDraft` here. Clearing is handled by LinkEditorPanel via `onClose`
-    // after a successful save, so the draft remains visible until the panel closes.
   }
 
   async function handleLinkDelete(): Promise<void> {
@@ -289,19 +431,13 @@ export default function App() {
     setRefreshLinkTypeId(linkDraft.linkTypeId)
   }
 
-  function handleLogout() {
-    localStorage.clear()
-    setToken('')
-    setDisplayName('')
-    setRole('')
-    setMaps([])
-    setCountries([])
-    setSelectedMapId(null)
-    setActivePanel(null)
-    setShowCreateMapPanel(false)
-    setLoadingError('')
-    setMobileMenuOpen(false)
-  }
+  useEffect(() => {
+    if (selectedMapId != null) {
+      localStorage.setItem('selectedMapId', String(selectedMapId))
+    } else {
+      localStorage.removeItem('selectedMapId')
+    }
+  }, [selectedMapId])
 
   async function refreshCountries() {
     const countryRows: Country[] = await api.getCountries()
@@ -317,16 +453,21 @@ export default function App() {
     setCountries(countriesWithCoordinates)
   }
 
-  useEffect(() => {
-    if (selectedMapId != null) {
-      localStorage.setItem('selectedMapId', String(selectedMapId))
-    } else {
-      localStorage.removeItem('selectedMapId')
-    }
-  }, [selectedMapId])
-
-  if (!token) {
-    return <LoginPage onLogin={handleLogin} />
+  if (!authReady) {
+    return (
+      <div
+        style={{
+          minHeight: '100vh',
+          display: 'grid',
+          placeItems: 'center',
+          background: 'linear-gradient(180deg, #08111f 0%, #0f172a 100%)',
+          color: 'white',
+          fontSize: 14,
+        }}
+      >
+        認証情報を確認しています...
+      </div>
+    )
   }
 
   const headerStyle: React.CSSProperties = {
@@ -363,6 +504,8 @@ export default function App() {
     textAlign: 'left',
   }
 
+  const authButtonLabel = isGuest ? 'ログイン' : 'ログアウト'
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#08111f' }}>
       <div style={headerStyle}>
@@ -373,6 +516,11 @@ export default function App() {
             onChange={(event) => {
               const v = event.target.value
               if (v === '__create_new') {
+                if (isGuest) {
+                  setAuthPanelMessage('マップの作成にはログインが必要です。')
+                  setShowAuthPanel(true)
+                  return
+                }
                 setShowCreateMapPanel(true)
                 return
               }
@@ -430,7 +578,7 @@ export default function App() {
             </button>
           </>
         )}
-        
+
         {mapEditable && (
           <button
             onClick={() => setEditMode(!editMode)}
@@ -455,12 +603,22 @@ export default function App() {
         )}
 
         <span style={{ fontSize: 13, color: '#dbe4f0', display: isMobile ? 'none' : 'inline' }}>
-          {displayName}（{role}）
+          {displayName || (isGuest ? 'ゲスト' : '')}（{role || (isGuest ? 'viewer' : '')}）
         </span>
 
         {!isMobile && (
-          <button onClick={handleLogout} style={headerButtonStyle}>
-            ログアウト
+          <button
+            onClick={() => {
+              if (isGuest) {
+                setAuthPanelMessage('')
+                setShowAuthPanel(true)
+                return
+              }
+              void handleLogout()
+            }}
+            style={headerButtonStyle}
+          >
+            {authButtonLabel}
           </button>
         )}
       </div>
@@ -482,7 +640,7 @@ export default function App() {
         >
           <div style={{ display: 'grid', gap: 10 }}>
             <div style={{ fontSize: 12, color: '#9fb2cc' }}>
-              {displayName}（{role}）
+              {displayName || (isGuest ? 'ゲスト' : '')}（{role || (isGuest ? 'viewer' : '')}）
             </div>
 
             {loadingError && <div style={{ fontSize: 12, color: '#fda4af' }}>{loadingError}</div>}
@@ -504,8 +662,19 @@ export default function App() {
               </button>
             )}
 
-            <button onClick={() => { handleLogout(); setMobileMenuOpen(false) }} style={mobilePanelButtonStyle}>
-              ログアウト
+            <button
+              onClick={() => {
+                if (isGuest) {
+                  setAuthPanelMessage('')
+                  setShowAuthPanel(true)
+                } else {
+                  void handleLogout()
+                }
+                setMobileMenuOpen(false)
+              }}
+              style={mobilePanelButtonStyle}
+            >
+              {authButtonLabel}
             </button>
           </div>
         </div>
@@ -521,7 +690,6 @@ export default function App() {
           mapDataRefreshKey={mapDataRefreshKey}
           refreshLinkTypeId={refreshLinkTypeId}
           onLinksRefreshed={() => {
-            // clear the trigger once MapView handled the partial refresh
             setRefreshLinkTypeId(null)
           }}
         />
@@ -540,7 +708,6 @@ export default function App() {
         />
       )}
 
-      {/* debug: log linkDraft changes */}
       <DebugLogger linkDraft={linkDraft} />
 
       {activePanel === 'mapEditor' && selectedMap && (
@@ -588,6 +755,17 @@ export default function App() {
           onUpdate={() => {
             void refreshCountries()
           }}
+        />
+      )}
+
+      {showAuthPanel && (
+        <LoginPage
+          onLogin={handleLogin}
+          onClose={() => {
+            setShowAuthPanel(false)
+            setAuthPanelMessage('')
+          }}
+          message={authPanelMessage}
         />
       )}
     </div>

@@ -10,6 +10,16 @@ import type {
 
 const BASE = ((import.meta.env.VITE_API_BASE_URL as string | undefined) ?? 'http://localhost:8000').replace(/\/+$/, '')
 
+export class ApiError extends Error {
+  status: number
+
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+  }
+}
+
 function getToken() {
   return localStorage.getItem('token')
 }
@@ -40,12 +50,20 @@ async function getErrorMessage(res: Response) {
 async function requestJson<T>(url: string, init?: RequestInit) {
   const res = await fetch(url, init)
   if (!res.ok) {
-    throw new Error(await getErrorMessage(res))
+    throw new ApiError(res.status, await getErrorMessage(res))
   }
   return res.json() as Promise<T>
 }
 
 export const api = {
+  async guestLogin(guestSessionId: string) {
+    return requestJson<AuthResponse & { guestSessionId: string }>(`${BASE}/api/auth/guest`, {
+      method: 'POST',
+      headers: buildHeaders(true),
+      body: JSON.stringify({ guestSessionId }),
+    })
+  },
+
   async register(name: string, password: string, displayName: string) {
     return requestJson<AuthResponse>(`${BASE}/api/auth/register`, {
       method: 'POST',
@@ -136,19 +154,19 @@ export const api = {
   async deleteCountry(id: string) {
     return requestJson<{ message: string }>(`${BASE}/api/countries/${id}`, {
       method: 'DELETE',
-      headers: buildHeaders(),
+      headers: buildHeaders(true),
     })
   },
 
   async getMaps() {
     return requestJson<MapRecord[]>(`${BASE}/api/maps`,{
-      headers: buildHeaders(),
+      headers: buildHeaders(true),
      })
   },
 
   async getMap(mapId: number) {
     return requestJson<MapRecord>(`${BASE}/api/maps/${mapId}`,{
-      headers: buildHeaders(),
+      headers: buildHeaders(true),
      })
   },
 
@@ -211,18 +229,32 @@ export const api = {
     return requestJson<MapRecord>(`${BASE}/api/maps`, {
       method: 'POST',
       headers: buildHeaders(true),
-      body: JSON.stringify({ ...(data as any), owner_id }),
+      body: JSON.stringify({
+        name: data.name,
+        name_ja: data.name_ja,
+        owner_id,
+        read_permission: data.read_permission,
+        edit_permission: data.edit_permission,
+        exist_from: data.exist_from,
+        exist_until: data.exist_until,
+        time_scale: data.time_scale,
+        summary: data.summary ?? '',
+        summary_jp: data.summary_jp ?? '',
+        regulations: data.regulations ?? '',
+      }),
     })
   },
 
   async isMapEditable(mapId: number) {
     return requestJson<{ editable: boolean }>(`${BASE}/api/maps/${mapId}/editable`, {
-      headers: buildHeaders(),
+      headers: buildHeaders(true),
     })
   },
 
   async getLinkTypes(mapId: number) {
-    return requestJson<LinkType[]>(`${BASE}/api/link_types?map_id=${encodeURIComponent(mapId)}`)
+    return requestJson<LinkType[]>(`${BASE}/api/link_types?map_id=${encodeURIComponent(mapId)}`, {
+      headers: buildHeaders(true),
+    })
   },
 
   async createLinkType(data: {
@@ -266,7 +298,7 @@ export const api = {
 
     return requestJson<{ detail: string }>(`${BASE}/api/link_types?${params.toString()}`, {
       method: 'DELETE',
-      headers: buildHeaders(),
+      headers: buildHeaders(true),
     })
   },
 
@@ -284,7 +316,9 @@ export const api = {
       date,
     })
 
-    return requestJson<RelationLink[]>(`${BASE}/api/links/${mapId}?${params.toString()}`)
+    return requestJson<RelationLink[]>(`${BASE}/api/links/${mapId}?${params.toString()}`, {
+      headers: buildHeaders(true),
+    })
   },
 
   async createLink(data: {
@@ -320,18 +354,20 @@ export const api = {
   async deleteLink(linkId: number) {
     return requestJson<{ detail: string }>(`${BASE}/api/links/${linkId}`, {
       method: 'DELETE',
-      headers: buildHeaders(),
+      headers: buildHeaders(true),
     })
   },
 
   async getMapPoints(mapId: number) {
-    return requestJson<MapPoint[]>(`${BASE}/api/maps/${mapId}/map_points`)
+    return requestJson<MapPoint[]>(`${BASE}/api/maps/${mapId}/map_points`, {
+      headers: buildHeaders(true),
+    })
   },
 
   async updateMapPointColor(mapId: number, mapPointId: number, color: string) {
     return requestJson<MapPoint>(`${BASE}/api/maps/${mapId}/map_points/${mapPointId}?color=${encodeURIComponent(color)}`, {
       method: 'PATCH',
-      headers: buildHeaders(),
+      headers: buildHeaders(true),
     })
   },
 }

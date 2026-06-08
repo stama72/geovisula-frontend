@@ -49,6 +49,8 @@ type CountryFeatureProperties = {
   color: string
 }
 
+type DraftFeatureProperties = Record<string, never>
+
 function buildArcCoordinates(from: [number, number], to: [number, number], segments = 48) {
   const [fromLng, fromLat] = from
   let toLng = to[0]
@@ -241,10 +243,10 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, onLinkE
           if (!draftRef.current.fromCountryId) {
             draftRef.current = { fromCountryId: countryId, fromCoords: coords }
             const src = map.getSource('geovisula-link-draft') as mapboxgl.GeoJSONSource | undefined
-            src?.setData(buildFeatureCollection([{
+            src?.setData(buildFeatureCollection<DraftFeatureProperties>([{
               type: 'Feature',
               geometry: { type: 'LineString', coordinates: buildArcCoordinates(coords, coords, 8) },
-              properties: {} as any,
+              properties: {},
             }]))
             return
           }
@@ -287,10 +289,10 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, onLinkE
         draftRef.current.toCoords = toCoords
         const src = map.getSource('geovisula-link-draft') as mapboxgl.GeoJSONSource | undefined
         const lineCoords = buildArcCoordinates(draftRef.current.fromCoords as [number, number], toCoords)
-        src?.setData(buildFeatureCollection([{
+        src?.setData(buildFeatureCollection<DraftFeatureProperties>([{
           type: 'Feature',
           geometry: { type: 'LineString', coordinates: lineCoords },
-          properties: {} as any,
+          properties: {},
         }]))
       })
 
@@ -330,10 +332,10 @@ export default function MapView({ mapId, editMode = false, onLinkCreate, onLinkE
 
     const from = activeDraft.fromCoords
     const to = activeDraft.toCoords ?? activeDraft.fromCoords
-    src.setData(buildFeatureCollection([{
+    src.setData(buildFeatureCollection<DraftFeatureProperties>([{
       type: 'Feature',
       geometry: { type: 'LineString', coordinates: buildArcCoordinates(from, to) },
-      properties: {} as any,
+      properties: {},
     }]))
     draftRef.current = { fromCountryId: activeDraft.fromCountryId, fromCoords: activeDraft.fromCoords, toCoords: activeDraft.toCoords }
   }, [activeDraft])
