@@ -3,9 +3,11 @@ import { api } from './api'
 
 type Props = {
   onLogin: (token: string, displayName: string, role: string) => void
+  onClose: () => void
+  message?: string
 }
 
-export default function LoginPage({ onLogin }: Props) {
+export default function LoginPage({ onLogin, onClose, message = '' }: Props) {
   const [mode, setMode]       = useState<'login' | 'register'>('login')
   const [password, setPass]   = useState('')
   const [name, setName]       = useState('')
@@ -71,8 +73,16 @@ export default function LoginPage({ onLogin }: Props) {
       setLoading(false)
       return
     }
-    password.length > 72 && setError('パスワードは72文字以下である必要があります')
-    password.trim() !== password && setError('パスワードの前後にスペースは使用できません')
+    if (password.length > 72) {
+      setError('パスワードは72文字以下である必要があります')
+      setLoading(false)
+      return
+    }
+    if (password.trim() !== password) {
+      setError('パスワードの前後にスペースは使用できません')
+      setLoading(false)
+      return
+    }
     
     try {
       if (mode === 'register') {
@@ -89,11 +99,48 @@ export default function LoginPage({ onLogin }: Props) {
   }
 
   return (
-    <div style={{ background: '#f0f2f5', minHeight: '100vh' }}>
+    <div style={overlayStyle}>
       <div style={cardStyle}>
-        <h2 style={{ textAlign: 'center', marginBottom: 24, color: '#333' }}>
-          GeoVisula
-        </h2>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <div>
+            <div style={{ fontSize: 12, color: '#64748b' }}>GeoVisula</div>
+            <h2 style={{ margin: '4px 0 0', color: '#0f172a', fontSize: 24 }}>ログイン / 新規登録</h2>
+          </div>
+          <button
+            onClick={onClose}
+            style={{
+              border: 'none',
+              background: 'transparent',
+              color: '#64748b',
+              fontSize: 20,
+              cursor: 'pointer',
+              lineHeight: 1,
+            }}
+            aria-label="閉じる"
+          >
+            ×
+          </button>
+        </div>
+
+        <p style={{ margin: '0 0 12px', color: '#475569', fontSize: 13, lineHeight: 1.6 }}>
+          ログインするとマップの作成、編集ができます。
+        </p>
+
+        {message && (
+          <div
+            style={{
+              marginBottom: 16,
+              padding: '10px 12px',
+              borderRadius: 10,
+              background: '#fef3c7',
+              color: '#92400e',
+              fontSize: 13,
+              lineHeight: 1.5,
+            }}
+          >
+            {message}
+          </div>
+        )}
 
         {/* ログイン / 登録 切り替え */}
         <div style={{ display: 'flex', marginBottom: 24, border: '1px solid #ddd', borderRadius: 6, overflow: 'hidden' }}>
@@ -147,4 +194,15 @@ export default function LoginPage({ onLogin }: Props) {
       </div>
     </div>
   )
+}
+
+const overlayStyle: React.CSSProperties = {
+  position: 'fixed',
+  inset: 0,
+  zIndex: 80,
+  background: 'rgba(15, 23, 42, 0.58)',
+  backdropFilter: 'blur(8px)',
+  display: 'grid',
+  placeItems: 'center',
+  padding: 16,
 }
