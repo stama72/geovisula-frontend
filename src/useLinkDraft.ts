@@ -11,7 +11,7 @@ type UseLinkDraftResult = {
   setLinkDraft: (draft: LinkDraft | null) => void
   handleLinkCreate(payload: { fromCountryId: string; toCountryId: string; fromCoords: [number, number]; toCoords: [number, number] }): Promise<void>
   handleLinkEdit(payload: { linkId: number; linkTypeId: number; fromCountryId: string; toCountryId: string; existFrom: string | null; existUntil: string | null }): void
-  handleLinkSave(form: { linkTypeId: number; existFrom: string; existUntil: string }): Promise<void>
+  handleLinkSave(form: { linkTypeId: number; existFrom: string; existUntil: string; summary: string; source_url: string }): Promise<void>
   handleLinkDelete(): Promise<void>
 }
 
@@ -48,7 +48,7 @@ export default function useLinkDraft(
     })
   }
 
-  async function handleLinkSave(form: { linkTypeId: number; existFrom: string; existUntil: string }): Promise<void> {
+  async function handleLinkSave(form: { linkTypeId: number; existFrom: string; existUntil: string; summary: string; source_url: string }): Promise<void> {
     if (!selectedMapId || !linkDraft) {
       return
     }
@@ -62,7 +62,7 @@ export default function useLinkDraft(
     }
 
     if (linkDraft.mode === 'create') {
-      await api.createLink({
+      const newLink = await api.createLink({
         map_id: selectedMapId,
         link_type: form.linkTypeId,
         from_country: fromCountry.capital_point_id,
@@ -70,6 +70,13 @@ export default function useLinkDraft(
         exist_from: form.existFrom,
         exist_until: form.existUntil,
       })
+      if (form.summary) {
+        await api.upsertLinkDetails(newLink.id, {
+          summary: form.summary,
+          summary_ja: form.summary,
+          source_url: form.source_url || null,
+        })
+      }
       onSaved(form.linkTypeId)
       return
     }
@@ -82,6 +89,13 @@ export default function useLinkDraft(
       exist_from: form.existFrom,
       exist_until: form.existUntil,
     })
+    if (form.summary) {
+      await api.upsertLinkDetails(linkDraft.linkId, {
+        summary: form.summary,
+        summary_ja: form.summary,
+        source_url: form.source_url || null,
+      })
+    }
 
     onSaved(linkDraft.linkTypeId)
   }

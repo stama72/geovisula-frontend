@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { api } from './api'
-import { APP_HEADER_HEIGHT } from './layoutConstants'
-import useViewport from './useViewport'
+import { api } from '../api'
+import { APP_HEADER_HEIGHT } from '../layoutConstants'
+import useViewport from '../useViewport'
 
 type Country = { id: string; name_ja: string; lat: number; lng: number }
 
