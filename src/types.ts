@@ -70,3 +70,25 @@ export type CountryEditorEntry = {
   lat: number
   lng: number
 }
+
+export type AuthMode = 'guest' | 'user'
+
+export type LinkCreateDraft = {
+  mode: 'create'
+  fromCountryId: string
+  toCountryId: string
+  fromCoords: [number, number]
+  toCoords: [number, number]
+}
+
+export type LinkEditDraft = {
+  mode: 'edit'
+  linkId: number
+  fromCountryId: string
+  toCountryId: string
+  linkTypeId: number
+  existFrom: string
+  existUntil: string
+}
+
+export type LinkDraft = LinkCreateDraft | LinkEditDraft
