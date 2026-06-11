@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import './App.css'
 import { api } from './api'
-import AppHeader from './AppHeader'
-import CountryManager from './CountryManager'
-import LinkEditorPanel from './LinkEditorPanel'
-import LinkTypesPanel from './LinkTypesPanel'
-import LoginPage from './LoginPage'
-import MapEditorPanel from './MapEditorPanel'
+import AppHeader from './panels/AppHeader'
+import CountryManager from './panels/CountryManager'
+import LinkEditorPanel from './panels/LinkEditorPanel'
+import LinkTypesPanel from './panels/LinkTypesPanel'
+import LoginPage from './panels/LoginPage'
+import MapEditorPanel from './panels/MapEditorPanel'
 import MapView from './MapView'
 import useAuth from './useAuth'
 import useLinkDraft from './useLinkDraft'
@@ -109,6 +109,7 @@ export default function App() {
         <LinkEditorPanel
           draft={linkDraft.linkDraft}
           linkTypes={linkTypes.linkTypes}
+          countries={mapData.countries}
           onClose={() => {
             console.log('App: LinkEditorPanel onClose -> clearing linkDraft')
             linkDraft.setLinkDraft(null)

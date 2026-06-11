@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import mapboxgl from 'mapbox-gl'
+import { api } from './api'
 import { buildArcCoordinates, buildFeatureCollection, formatDateLabel } from './mapViewUtils'
 import type { ActiveDraft, CountryFeatureProperties, DraftFeatureProperties, DraftState, LinkFeatureProperties } from './mapViewTypes'
 
@@ -140,15 +141,26 @@ export default function useMapboxInit({
           return
         }
 
-        new mapboxgl.Popup({ closeButton: true, closeOnClick: true })
+        const baseHtml = `
+          <strong>${properties.fromCountryName} ⇒ ${properties.toCountryName}</strong><br />
+          <div>${properties.linkTypeName}</div>
+          <div>${formatDateLabel(properties.existFrom)} ～ ${formatDateLabel(properties.existUntil)}</div>
+        `
+        const popup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true })
           .setLngLat(event.lngLat)
-          .setHTML(`
-            <strong>${properties.fromCountryName} → ${properties.toCountryName}</strong><br />
-            <div>Link type: ${properties.linkTypeName}</div>
-            <div>Valid from: ${formatDateLabel(properties.existFrom)}</div>
-            <div>Valid until: ${formatDateLabel(properties.existUntil)}</div>
-          `)
+          .setHTML(baseHtml)
           .addTo(map)
+
+        api.getLinkDetails(properties.id).then((details) => {
+          if (!details || (!details.summary && !details.source_url)) return
+          const summaryHtml = details.summary
+            ? `<div style="margin-top:6px;font-size:13px;color:#334155">${details.summary}</div>`
+            : ''
+          const urlHtml = details.source_url
+            ? `<div style="margin-top:4px"><a href="${details.source_url}" target="_blank" rel="noopener noreferrer" style="font-size:13px;color:#2563eb">詳細URL</a></div>`
+            : ''
+          popup.setHTML(baseHtml + summaryHtml + urlHtml)
+        }).catch(() => { /* 詳細なしは正常 */ })
       })
 
       map.on('click', 'geovisula-countries-circle', (event) => {

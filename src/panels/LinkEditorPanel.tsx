@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import { APP_HEADER_HEIGHT } from './layoutConstants'
-import useViewport from './useViewport'
-import type { LinkType } from './types'
+import { api } from '../api'
+import { APP_HEADER_HEIGHT } from '../layoutConstants'
+import useViewport from '../useViewport'
+import type { CountryEditorEntry, LinkType } from '../types'
 
 type LinkCreateDraft = {
   mode: 'create'
@@ -26,8 +27,9 @@ type Draft = LinkCreateDraft | LinkEditDraft
 type Props = {
   draft: Draft
   linkTypes: LinkType[]
+  countries: CountryEditorEntry[]
   onClose: () => void
-  onSave: (form: { linkTypeId: number; existFrom: string; existUntil: string }) => Promise<void>
+  onSave: (form: { linkTypeId: number; existFrom: string; existUntil: string; summary: string; source_url: string }) => Promise<void>
   onDelete?: () => Promise<void>
 }
 
@@ -66,7 +68,11 @@ const buttonStyle = (kind: 'primary' | 'secondary'): React.CSSProperties => ({
   fontWeight: 600,
 })
 
-export default function LinkEditorPanel({ draft, linkTypes, onClose, onSave, onDelete }: Props) {
+export default function LinkEditorPanel({ draft, linkTypes, countries, onClose, onSave, onDelete }: Props) {
+  const countryName = (isoId: string) => {
+    const c = countries.find((c) => c.id === isoId)
+    return c ? c.name_ja : isoId
+  }
   const { isMobile } = useViewport()
   useEffect(() => {
     console.log('LinkEditorPanel mounted with draft:', draft)
@@ -78,6 +84,8 @@ export default function LinkEditorPanel({ draft, linkTypes, onClose, onSave, onD
   const [linkTypeId, setLinkTypeId] = useState<number>(isEditMode ? draft.linkTypeId : (linkTypes[0]?.id ?? 0))
   const [existFrom, setExistFrom] = useState(isEditMode ? draft.existFrom : '1900-01-01')
   const [existUntil, setExistUntil] = useState(isEditMode ? draft.existUntil : '9999-12-31')
+  const [summary, setSummary] = useState('')
+  const [sourceUrl, setSourceUrl] = useState('')
   const [message, setMessage] = useState('')
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -106,12 +114,22 @@ export default function LinkEditorPanel({ draft, linkTypes, onClose, onSave, onD
       setLinkTypeId(draft.linkTypeId)
       setExistFrom(draft.existFrom)
       setExistUntil(draft.existUntil)
+      setSummary('')
+      setSourceUrl('')
+      api.getLinkDetails(draft.linkId).then((details) => {
+        if (details) {
+          setSummary(details.summary)
+          setSourceUrl(details.source_url ?? '')
+        }
+      })
       return
     }
 
     setLinkTypeId(linkTypes[0]?.id ?? 0)
     setExistFrom('1900-01-01')
     setExistUntil('9999-12-31')
+    setSummary('')
+    setSourceUrl('')
   }, [draft, linkTypes])
 
   useEffect(() => {
@@ -138,7 +156,7 @@ export default function LinkEditorPanel({ draft, linkTypes, onClose, onSave, onD
 
     setSaving(true)
     try {
-      await onSave({ linkTypeId, existFrom, existUntil })
+      await onSave({ linkTypeId, existFrom, existUntil, summary, source_url: sourceUrl })
       console.log('LinkEditorPanel: onSave succeeded, calling onClose')
       onClose()
     } catch (error) {
@@ -182,8 +200,8 @@ export default function LinkEditorPanel({ draft, linkTypes, onClose, onSave, onD
       </div>
 
       <div style={{ marginBottom: 16, padding: 12, background: '#f8fafc', borderRadius: 10, fontSize: 13, color: '#334155' }}>
-        <div><strong>開始国:</strong> {draft.fromCountryId}</div>
-        <div style={{ marginTop: 4 }}><strong>終了国:</strong> {draft.toCountryId}</div>
+        <div><strong>開始国:</strong> {countryName(draft.fromCountryId)}</div>
+        <div style={{ marginTop: 4 }}><strong>終了国:</strong> {countryName(draft.toCountryId)}</div>
       </div>
 
       <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
@@ -207,9 +225,31 @@ export default function LinkEditorPanel({ draft, linkTypes, onClose, onSave, onD
         <input type="date" value={existFrom} onChange={(event) => setExistFrom(event.target.value)} style={{ ...inputStyle, marginTop: 6 }} />
       </label>
 
-      <label style={{ display: 'block', marginBottom: 16, fontSize: 13, color: '#334155' }}>
+      <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
         終了日 (exist_until)
         <input type="date" value={existUntil} onChange={(event) => setExistUntil(event.target.value)} style={{ ...inputStyle, marginTop: 6 }} />
+      </label>
+
+      <label style={{ display: 'block', marginBottom: 12, fontSize: 13, color: '#334155' }}>
+        説明
+        <textarea
+          value={summary}
+          onChange={(event) => setSummary(event.target.value)}
+          placeholder="このリンクの説明を入力..."
+          rows={3}
+          style={{ ...inputStyle, marginTop: 6, resize: 'vertical' }}
+        />
+      </label>
+
+      <label style={{ display: 'block', marginBottom: 16, fontSize: 13, color: '#334155' }}>
+        ソース・参考URL
+        <input
+          type="url"
+          value={sourceUrl}
+          onChange={(event) => setSourceUrl(event.target.value)}
+          placeholder="https://..."
+          style={{ ...inputStyle, marginTop: 6 }}
+        />
       </label>
 
       {message && (

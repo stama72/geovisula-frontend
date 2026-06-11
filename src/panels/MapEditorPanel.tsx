@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { api } from './api'
-import { APP_HEADER_HEIGHT } from './layoutConstants'
-import useViewport from './useViewport'
-import type { MapRecord } from './types'
+import { api } from '../api'
+import { APP_HEADER_HEIGHT } from '../layoutConstants'
+import useViewport from '../useViewport'
+import type { MapRecord } from '../types'
 
 type BaseProps = {
   onClose: () => void

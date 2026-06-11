@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { APP_HEADER_HEIGHT } from './layoutConstants'
-import useViewport from './useViewport'
-import type { MapRecord } from './types'
+import { APP_HEADER_HEIGHT } from '../layoutConstants'
+import useViewport from '../useViewport'
+import type { MapRecord } from '../types'
 
 type ActivePanel = 'mapEditor' | 'linkTypes' | 'countryManager' | null
 

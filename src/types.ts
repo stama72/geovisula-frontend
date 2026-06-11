@@ -92,3 +92,10 @@ export type LinkEditDraft = {
 }
 
 export type LinkDraft = LinkCreateDraft | LinkEditDraft
+
+export type LinkDetails = {
+  link_id: number
+  summary: string
+  summary_ja: string
+  source_url: string | null
+}

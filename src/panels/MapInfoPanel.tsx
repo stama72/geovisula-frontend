@@ -1,4 +1,4 @@
-import type { LinkType, MapRecord } from './types'
+import type { LinkType, MapRecord } from '../types'
 
 type Props = {
   mapInfo: MapRecord

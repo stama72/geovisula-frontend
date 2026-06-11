@@ -2,6 +2,7 @@ import type {
   AuthResponse,
   Country,
   CountryCoordinates,
+  LinkDetails,
   LinkType,
   MapPoint,
   MapRecord,
@@ -355,6 +356,29 @@ export const api = {
     return requestJson<{ detail: string }>(`${BASE}/api/links/${linkId}`, {
       method: 'DELETE',
       headers: buildHeaders(true),
+    })
+  },
+
+  async getLinkDetails(linkId: number): Promise<LinkDetails | null> {
+    try {
+      return await requestJson<LinkDetails>(`${BASE}/api/links/${linkId}/details`, {
+        headers: buildHeaders(),
+      })
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) return null
+      throw e
+    }
+  },
+
+  async upsertLinkDetails(linkId: number, data: {
+    summary: string
+    summary_ja: string
+    source_url: string | null
+  }) {
+    return requestJson<LinkDetails>(`${BASE}/api/links/${linkId}/details`, {
+      method: 'PUT',
+      headers: buildHeaders(true),
+      body: JSON.stringify(data),
     })
   },
 
